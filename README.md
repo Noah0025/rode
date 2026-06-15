@@ -107,7 +107,7 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 | [RokidAIAssistant](https://github.com/zero2005x/RokidAIAssistant) | Rokid（同硬件）| 眼镜 ↔ 手机蓝牙 | 云 API（多家，自带 key），非自托管 |
 | [MentraOS](https://github.com/Mentra-Community/MentraOS) | Vuzix / Even / Mach1 | 厂商 OS，自托管 mini-app | 可接本地 LLM；不支持 Rokid |
 
-**架构取舍**：Rokid 基于完整 Android，rode 得以在眼镜端运行原生应用、经 WiFi 直连后端、不依赖手机；代价是 YodaOS 待机时会关闭 WiFi，需用 adb 兜底（见「WiFi 已知限制」）。Even Realities G2、Meta 等方案将连接交给手机蓝牙，规避了 WiFi 问题，但依赖厂商 App 且需随身携带手机。两种路线各有取舍，按使用场景选择。
+**架构取舍**：rode v1 走「眼镜 WiFi 直连后端、不经手机」的路线，胜在最省事——无需额外的手机 app；代价是 YodaOS 待机时会关闭 WiFi，需用 adb 兜底（见「WiFi 已知限制」）。另一条路是「蓝牙经手机 companion」（RokidAIAssistant 等采用，需专门写一个手机 app + 用 Rokid CXR SDK），可规避 WiFi 问题，但需随身带手机——这是 rode 的路线图 R1，而非已排除的方案。
 
 ## 路线图
 - **R1 CXR 蓝牙移动形态**：手机 companion 经蓝牙做网关，免公网 + 低功耗 + 解决 WiFi（Rokid 官方形态）
