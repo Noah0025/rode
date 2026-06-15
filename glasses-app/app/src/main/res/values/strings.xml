@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">Rode</string>
+    <string name="idle_hint">单击：说话／发送　　双击：取消／退出</string>
+    <string name="status_recognizing">识别中</string>
+    <string name="status_thinking">思考中</string>
+    <string name="msg_cancelled">已取消</string>
+    <string name="err_no_speech">没说话</string>
+    <string name="err_backend_unreachable">没连上后端，检查连接</string>
+    <string name="err_timeout">超时了</string>
+    <string name="err_generic">出错了</string>
+    <string name="err_disconnected">连接断了</string>
+    <string name="err_mic_denied">麦克风权限被拒，无法说话</string>
+    <string name="divider_history">—— 以上为历史 ——</string>
+    <string name="divider_chatted">—— %1$s 聊到 ——</string>
+    <string name="divider_date_pattern">M月d日 HH:mm</string>
 </resources>

@@ -144,7 +144,7 @@ class RodeClient(
         releaseLocks()
         if (wav.isEmpty()) {
             // patch I1: too short / empty → back to IDLE
-            listener.onError("没说话")
+            listener.onError(context.getString(R.string.err_no_speech))
             setState(RodeState.IDLE)
             return
         }
@@ -157,7 +157,7 @@ class RodeClient(
             } catch (t: Throwable) {
                 Log.e(TAG, "turn failed", t)
                 withContext(Dispatchers.Main) {
-                    listener.onError("没连上后端，检查连接")
+                    listener.onError(context.getString(R.string.err_backend_unreachable))
                     if (state == RodeState.THINKING) setState(RodeState.IDLE)
                 }
             } finally {
@@ -180,7 +180,7 @@ class RodeClient(
                 override fun run() {
                     if (state == RodeState.THINKING) {
                         turnJob?.cancel()
-                        listener.onError("超时了")
+                        listener.onError(context.getString(R.string.err_timeout))
                         setState(RodeState.IDLE)
                     }
                 }
@@ -225,7 +225,7 @@ class RodeClient(
                         }
                     }
                     "error" -> withContext(Dispatchers.Main) {
-                        listener.onError(ev.text ?: "出错了")
+                        listener.onError(ev.text ?: context.getString(R.string.err_generic))
                         setState(RodeState.IDLE)
                     }
                     "done" -> { if (!answered) withContext(Dispatchers.Main) { setState(RodeState.IDLE) } }
@@ -234,7 +234,7 @@ class RodeClient(
             // patch I2: stream closed without a terminal event → don't deadlock; rest.
             if (!answered && state == RodeState.THINKING) {
                 withContext(Dispatchers.Main) {
-                    listener.onError("连接断了")
+                    listener.onError(context.getString(R.string.err_disconnected))
                     setState(RodeState.IDLE)
                 }
             }

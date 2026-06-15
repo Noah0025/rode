@@ -154,7 +154,7 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
         if (requestCode == REQ_PERMISSIONS) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 startClient()
-            } else appendSystem("麦克风权限被拒，无法说话")
+            } else appendSystem(getString(R.string.err_mic_denied))
         }
     }
 
@@ -188,7 +188,7 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
             KeyEvent.KEYCODE_BACK -> {
                 val st = client?.currentState
                 if (st == RodeState.LISTENING || st == RodeState.THINKING) {
-                    if (event?.repeatCount == 0) { client?.cancel(); appendSystem("已取消") }
+                    if (event?.repeatCount == 0) { client?.cancel(); appendSystem(getString(R.string.msg_cancelled)) }
                     return true // 消费,不退出——误触可双击撤回
                 }
                 // 其它状态(IDLE/SPEAKING)落到 super → 退出
@@ -274,11 +274,9 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
     /** 历史与本次会话之间的浅色分隔线：—— x月x日xx:xx 聊到 —— */
     private fun renderHistoryDivider(millis: Long) {
         val label = if (millis > 0) {
-            val c = java.util.Calendar.getInstance().apply { timeInMillis = millis }
-            String.format("—— %d月%d日 %02d:%02d 聊到 ——",
-                c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH),
-                c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE))
-        } else "—— 以上为历史 ——"
+            val fmt = java.text.SimpleDateFormat(getString(R.string.divider_date_pattern), java.util.Locale.getDefault())
+            getString(R.string.divider_chatted, fmt.format(java.util.Date(millis)))
+        } else getString(R.string.divider_history)
         val tv = TextView(this).apply {
             text = label
             setTextColor(0xFF2E6B45.toInt())   // 比正文更暗的绿，浅淡不抢眼

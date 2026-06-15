@@ -1,0 +1,15 @@
+<resources>
+    <string name="idle_hint">Tap: talk / send　　Double-tap: cancel / exit</string>
+    <string name="status_recognizing">Recognizing</string>
+    <string name="status_thinking">Thinking</string>
+    <string name="msg_cancelled">Cancelled</string>
+    <string name="err_no_speech">No speech</string>
+    <string name="err_backend_unreachable">Can\'t reach backend — check connection</string>
+    <string name="err_timeout">Timed out</string>
+    <string name="err_generic">Something went wrong</string>
+    <string name="err_disconnected">Connection dropped</string>
+    <string name="err_mic_denied">Mic permission denied — can\'t talk</string>
+    <string name="divider_history">—— history above ——</string>
+    <string name="divider_chatted">—— last chat %1$s ——</string>
+    <string name="divider_date_pattern">MMM d, HH:mm</string>
+</resources>

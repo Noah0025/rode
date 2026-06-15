@@ -36,7 +36,7 @@ class WaveformView @JvmOverloads constructor(
     /** 「思考中…」文字：停下后先只显 Logo，等后端 status(STT 转写完成)才置 true 显文字。 */
     var showThinking: Boolean = false
 
-    var idleHint: String = "单击：说话／发送　　双击：取消／退出"
+    var idleHint: String = context.getString(R.string.idle_hint)
 
     /** 实时麦克风音量 0..1（LISTENING 用）。 */
     var amplitudeProvider: (() -> Float)? = null
@@ -106,8 +106,9 @@ class WaveformView @JvmOverloads constructor(
             val r = 5f + breath * 1.5f
             dot.alpha = (110 + breath * 120).toInt()
             canvas.drawCircle(dotX, y, r, dot)
-            val maxW = hintPaint.measureText("识别中 ···")
-            drawProgressText(canvas, "识别中", dotX - 14f - maxW, y)
+            val recognizing = context.getString(R.string.status_recognizing)
+            val maxW = hintPaint.measureText("$recognizing ···")
+            drawProgressText(canvas, recognizing, dotX - 14f - maxW, y)
         } else {
             // 思考中 / 朗读：Logo 在左侧，呼吸
             val logoR = 9f + breath * 3f
@@ -115,7 +116,7 @@ class WaveformView @JvmOverloads constructor(
             drawStar(canvas, w * 0.12f, y, logoR)
             if (mode == Mode.THINKING && showThinking) {
                 // 思考中：紧挨左侧 Logo 右边写「思考中…」（等转写回来才显）
-                drawProgressText(canvas, "思考中", w * 0.18f, y)
+                drawProgressText(canvas, context.getString(R.string.status_thinking), w * 0.18f, y)
             }
         }
     }
