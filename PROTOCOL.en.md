@@ -70,6 +70,6 @@ curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav https://<your-bac
 ```
 
 ## Notes for implementers
-- The only hard constraints on the backend are the ones above. The STT engine, AI brain, and public entry point are all your choice (the reference implementation uses whisper.cpp + any Agent + Tailscale, see backend/ and SETUP.md).
+- The only hard constraints on the backend are the ones above. The STT engine, AI brain, and public entry point are all your choice (the reference implementation uses whisper.cpp + any Agent + Tailscale, see backend/ and SETUP.en.md).
 - Wiring in the brain only requires implementing `Agent.ask(text, ctx) -> AsyncIterable<string>` (see `backend/agent/types.ts`); it exposes no details of any specific brain.
-- The glasses app's `URL` and `token` are written in by setup via adb (see SETUP.md); there is no pairing UI inside the app.
+- The glasses app's `URL` and `token` are written in by setup via adb (see SETUP.en.md); there is no pairing UI inside the app.

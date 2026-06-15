@@ -8,7 +8,7 @@
 
 ## Prerequisites (provided by the user)
 - An always-on machine (macOS or Linux) + [Bun](https://bun.sh)
-- An **AI brain**: Claude by default — running inside Claude Code, driven through the **Claude Agent SDK** (`bun install` installs `@anthropic-ai/claude-agent-sdk`); you need the `claude` CLI installed + a logged-in subscription or an API key. rode is the host and calls Claude Code as its engine; it is **not a channel of Claude Code**. You can also swap in any brain that implements the `Agent` interface (Codex / another LLM / your own build, see `backend/agent/types.ts` and `PROTOCOL.md`)
+- An **AI brain**: Claude by default — running inside Claude Code, driven through the **Claude Agent SDK** (`bun install` installs `@anthropic-ai/claude-agent-sdk`); you need the `claude` CLI installed + a logged-in subscription or an API key. rode is the host and calls Claude Code as its engine; it is **not a channel of Claude Code**. You can also swap in any brain that implements the `Agent` interface (Codex / another LLM / your own build, see `backend/agent/types.ts` and `PROTOCOL.en.md`)
   > Note: the default adapter may have SDK cold-start latency on the first turn (tens of seconds); subsequent turns continue the context via `resume`.
 - A **public ingress**: Tailscale by default ([install + log in](https://tailscale.com/download)); you can also swap in cloudflared/ngrok/frp (implement `ExposeProvider`, see `backend/expose/types.ts`)
 - Glasses side: the app already installed via adb (see README "Glasses-side install")
@@ -67,7 +67,7 @@ scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<你的RODE_GLAS
 
 ### 6. End-to-end acceptance
 On the glasses (make sure WiFi is connected), single-click to talk and ask something → the HUD shows "what you said → thinking → the brain's answer."
-Or curl directly on the backend machine (`audio` is the multipart field name, see PROTOCOL.md; note it differs from the `file` field of the step 1 whisper endpoint):
+Or curl directly on the backend machine (`audio` is the multipart field name, see PROTOCOL.en.md; note it differs from the `file` field of the step 1 whisper endpoint):
 ```sh
 TOKEN=$(grep '^RODE_GLASSES_TOKEN=' .env | cut -d= -f2)
 PUBLIC_URL="https://<node>.ts.net/glasses/chat"   # step 4 拿到的；本地自测可用 http://localhost:18790/glasses/chat
@@ -76,4 +76,4 @@ curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav "$PUBLIC_URL"
 You should see four kinds of SSE events: `user → status → answer → done`. (No wav on hand? `say -o /tmp/a.aiff "今天天气怎么样" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`)
 
 ## Swapping the brain (connecting a non-Claude agent)
-Implement `Agent.ask(text, ctx): AsyncIterable<string>` from `backend/agent/types.ts`, and in `backend/index.ts` replace the default `ClaudeCodeAgent` with your implementation. The protocol (`PROTOCOL.md`) stays the same.
+Implement `Agent.ask(text, ctx): AsyncIterable<string>` from `backend/agent/types.ts`, and in `backend/index.ts` replace the default `ClaudeCodeAgent` with your implementation. The protocol (`PROTOCOL.en.md`) stays the same.

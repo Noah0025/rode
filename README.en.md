@@ -32,8 +32,8 @@ This is **not** a plug-and-play consumer product. To use rode you need:
 眼镜 HUD 显示文字（v1 无语音朗读）
 ```
 
-- **Protocol contract** (the only interface between glasses ↔ backend): see [`PROTOCOL.md`](PROTOCOL.md)
-- **Setup** (executable by a human or an AI): see [`SETUP.md`](SETUP.md)
+- **Protocol contract** (the only interface between glasses ↔ backend): see [`PROTOCOL.en.md`](PROTOCOL.en.md)
+- **Setup** (executable by a human or an AI): see [`SETUP.en.md`](SETUP.en.md)
 - Pluggable points: the brain [`backend/agent/types.ts`](backend/agent/types.ts), the public ingress [`backend/expose/types.ts`](backend/expose/types.ts), STT [`backend/stt.ts`](backend/stt.ts)
 
 ## v1 scope and limitations
@@ -62,7 +62,7 @@ This is **not** a plug-and-play consumer product. To use rode you need:
 
 ## Quick start
 1. **Glasses-side install**: build the APK from `glasses-app/` and `adb install` (see below).
-2. **Backend**: follow [`SETUP.md`](SETUP.md) (install whisper → generate token → start the backend → expose to the public internet → `scripts/config-glasses.sh` to pair the glasses).
+2. **Backend**: follow [`SETUP.en.md`](SETUP.en.md) (install whisper → generate token → start the backend → expose to the public internet → `scripts/config-glasses.sh` to pair the glasses).
 3. Single-tap on the glasses to talk.
 
 ## Glasses-side install (build)
