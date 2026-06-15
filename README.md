@@ -4,7 +4,7 @@
 
 <div align="center">
   <img src="assets/rode-hud-demo.png" alt="rode HUD demo" width="320">
-  <p><em>眼镜 HUD 实拍（一次对话里）：自报身份（跑在你自己机器上的 Claude）· 把日程写进日历（agentic，真动手）· 英文问答（多语言）· 记住上一轮（多轮上下文）。用户在右、Rode 在左。</em></p>
+  <p><em>眼镜 HUD 实拍（同一段对话）：自报身份（运行在你自己机器上的 Claude）· 写入日历（agentic 执行）· 英文问答（多语言）· 引用上一轮（多轮上下文）。用户在右、Rode 在左。</em></p>
 </div>
 
 ---
@@ -39,7 +39,7 @@
 
 **能做什么**
 - 单击说话 → STT（whisper，多语言：中/英/德混说）→ 你的 AI 大脑 → 文字答案显示在 HUD
-- 默认大脑 = Claude，跑在 Claude Code 里：服务器上**完整 agentic** 能力——联网查实时信息、读写文件、跑代码、调 MCP 工具、写日历等（上图就真把日程写进了日历）
+- 默认大脑 = Claude，跑在 Claude Code 里：服务器上**完整 agentic** 能力——联网查实时信息、读写文件、跑代码、调 MCP 工具、写日历等（上图即写入了日历）
 - **多轮上下文**：记得上一句，且跨后端重启不丢（sessionId 落盘）
 - **对话历史**留在眼镜本地（最近 ~50 轮，按时间分段），重开 app 仍在
 - 误触可双击取消/撤回
@@ -97,17 +97,17 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 
 ## 与相关项目
 
-「把 AI 接进智能眼镜」不是新点子，最近「Claude Code 上眼镜」尤其活跃。rode **不号称首创**——它的位置是 **Rokid + 不经手机 + 自托管 agentic 大脑 + 可插拔**。
+已有多个项目将 AI 接入智能眼镜。rode 的定位是 **Rokid 平台、无需手机中转、自托管的可插拔 agentic 后端**。下表对比主要方案的硬件、连接方式与大脑形态：
 
 | 项目 | 硬件 | 连接 | 大脑 |
 |---|---|---|---|
-| **rode**（本项目）| Rokid（完整 Android/YodaOS）| 眼镜原生 app，**WiFi 直连**自建后端，**无手机** | 你自己的 agentic 大脑（默认 Claude，可换任意 agent），自托管 |
-| [claude-code-g2](https://github.com/sam-siavoshian/claude-code-g2) | Even Realities G2（纯显示）| 经手机**官方 App 的 WebView** + 蓝牙 | Claude，billed to Max |
-| [VisionClaude](https://github.com/mrdulasolutions/visionclaude) | iPhone / Meta Ray-Ban | 手机 → 本地 MCP | Claude，视觉为主 |
-| [RokidAIAssistant](https://github.com/zero2005x/RokidAIAssistant) | Rokid（同硬件）| 眼镜↔手机蓝牙 | 14 家**云 API**（自带 key），非自托管 agent |
-| [MentraOS](https://github.com/Mentra-Community/MentraOS) | Vuzix / Even / Mach1 | 厂商 OS，自托管 mini-app | 可接 local LLM；不支持 Rokid |
+| **rode**（本项目）| Rokid（完整 Android / YodaOS）| 眼镜原生 app，WiFi 直连自建后端，无需手机 | 自托管、可插拔（默认 Claude，可换任意 agent）|
+| [claude-code-g2](https://github.com/sam-siavoshian/claude-code-g2) | Even Realities G2（纯显示）| 经手机官方 App 的 WebView + 蓝牙 | Claude，计入 Max 订阅 |
+| [VisionClaude](https://github.com/mrdulasolutions/visionclaude) | iPhone / Meta Ray-Ban | 手机 → 本地 MCP | Claude，侧重视觉 |
+| [RokidAIAssistant](https://github.com/zero2005x/RokidAIAssistant) | Rokid（同硬件）| 眼镜 ↔ 手机蓝牙 | 云 API（多家，自带 key），非自托管 |
+| [MentraOS](https://github.com/Mentra-Community/MentraOS) | Vuzix / Even / Mach1 | 厂商 OS，自托管 mini-app | 可接本地 LLM；不支持 Rokid |
 
-**取舍**：Rokid 是完整 Android，所以 rode 能跑原生 app、WiFi 直连、彻底不要手机；代价是眼镜 WiFi 待机会被关、要 adb 兜底（见上「WiFi 已知限制」）。G2 / Meta 那派把连接甩给手机蓝牙、省了 WiFi 麻烦，但绑厂商 App、必须带手机。没有谁更优，看你要哪种。
+**架构取舍**：Rokid 基于完整 Android，rode 得以在眼镜端运行原生应用、经 WiFi 直连后端、不依赖手机；代价是 YodaOS 待机时会关闭 WiFi，需用 adb 兜底（见「WiFi 已知限制」）。Even Realities G2、Meta 等方案将连接交给手机蓝牙，规避了 WiFi 问题，但依赖厂商 App 且需随身携带手机。两种路线各有取舍，按使用场景选择。
 
 ## 路线图
 - **R1 CXR 蓝牙移动形态**：手机 companion 经蓝牙做网关，免公网 + 低功耗 + 解决 WiFi（Rokid 官方形态）
