@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 八角星（Rode logo） -->
+    <path
+        android:fillColor="#45F068"
+        android:pathData="M86,54 L66,58.98 L76.6,76.6 L58.98,66 L54,86 L49.02,66 L31.4,76.6 L42,58.98 L22,54 L42,49.02 L31.4,31.4 L49.02,42 L54,22 L58.98,42 L76.6,31.4 L66,49.02 Z" />
+    <!-- 眼镜镜片（黑色镂空显底色） -->
+    <path
+        android:fillColor="#0B140D"
+        android:pathData="M49,54 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+    <path
+        android:fillColor="#0B140D"
+        android:pathData="M59,54 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+</vector>

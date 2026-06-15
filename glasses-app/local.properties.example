@@ -1,0 +1,7 @@
+# 复制为 local.properties 后填值（local.properties 已 gitignore，勿提交）
+# sdk.dir = 你的 Android SDK 路径（必填；或设了 ANDROID_HOME 环境变量可省此行）
+#   macOS(brew): /opt/homebrew/share/android-commandlinetools
+sdk.dir=/path/to/android-sdk
+# 以下 URL/TOKEN 仅作 dev 编译期 fallback；真实值由 scripts/config-glasses.sh 经 adb 运行时注入,可留占位
+GLASSES_CHAT_URL=https://<your-node>.<tailnet>.ts.net/glasses/chat
+GLASSES_TOKEN=<your-bind-token>

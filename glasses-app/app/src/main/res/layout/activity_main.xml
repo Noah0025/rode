@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingBottom="10dp"
+    android:background="#000000">
+
+    <!-- Rode 上限：下移两行，标记 app 内容最高高度 -->
+    <TextView
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Rode"
+        android:textColor="#2E8B49"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.25"
+        android:paddingTop="96dp" />
+
+    <!-- 正文：填满 Rode 以下到底部 hint 的空间；沉底；顶部 fadingEdge 渐隐 -->
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="9dp"
+        android:fillViewport="true"
+        android:scrollbars="none"
+        android:requiresFadingEdge="vertical"
+        android:fadingEdgeLength="60dp"
+        android:paddingHorizontal="22dp">
+
+        <LinearLayout
+            android:id="@+id/conversation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="bottom"
+            android:orientation="vertical"
+            android:paddingBottom="2dp" />
+    </ScrollView>
+
+    <!-- 状态指示栏：IDLE 提示「单击说话/双击退出」/ 说话绿点右 / Rode Logo左 -->
+    <com.example.rokidvsikea.WaveformView
+        android:id="@+id/waveform"
+        android:layout_width="match_parent"
+        android:layout_height="30dp" />
+
+    <!-- 底部状态栏：时间靠左 · 信号/电量靠右 -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:paddingHorizontal="18dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/sbTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="--:--"
+            android:textColor="#2E8B49"
+            android:textSize="11sp" />
+
+        <!-- 模型 · 5h用量 · 7d用量；整条居中 + maxWidth 限宽，绝不挤到两侧图标，超长省略 -->
+        <TextView
+            android:id="@+id/sbUsage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:maxWidth="170dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:includeFontPadding="true"
+            android:text=""
+            android:textColor="#2E8B49"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:id="@+id/sbRight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:id="@+id/sbConn"
+                android:layout_width="14dp"
+                android:layout_height="11dp"
+                android:scaleType="fitCenter"
+                android:layout_marginEnd="5dp"
+                android:src="@drawable/ic_sb_wifi_off" />
+
+            <ImageView
+                android:id="@+id/sbBattery"
+                android:layout_width="6dp"
+                android:layout_height="12dp"
+                android:scaleType="fitXY"
+                android:layout_marginEnd="3dp"
+                android:src="@drawable/ic_sb_battery" />
+
+            <TextView
+                android:id="@+id/sbBatteryPct"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="#45F068"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </RelativeLayout>
+</LinearLayout>

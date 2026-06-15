@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.RokidOpenAIRealtimeExample">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.RokidOpenAIRealtimeExample">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- setup 经 adb 注入后端 URL+token。exported=true：实测 YodaOS 不让 adb 向非 exported
+             receiver 投递(result=0 未送达),release APK 又无法 run-as 直写 prefs,故必须 exported。
+             攻击面=同机其它 app 可投假配置→已用 https 校验 + 仅个人 dev 设备缓解(README 说明)。
+             signature 权限不可行(adb shell 不持该权限,会一并被挡)。 -->
+        <receiver
+            android:name=".ConfigReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.rokidvsikea.SET_CONFIG" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

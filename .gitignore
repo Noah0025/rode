@@ -1,0 +1,9 @@
+node_modules/
+.env
+inbox/
+*.log
+
+# whisper 模型（大文件，不入库）
+models/
+# GlassKit：Day1 起点模板的 clone 残留（app 已搬出至 glasses-app/），可删
+GlassKit/

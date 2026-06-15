@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rode — HUD 设计稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Micro+5&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --amber:#F6B65C;          /* 暖琥珀荧光主色（呼应珊瑚） */
+    --amber-dim:#7a5b30;
+    --amber-deep:#3a2c18;
+    --glow:0 0 1px #F6B65C, 0 0 6px rgba(246,182,92,.55), 0 0 14px rgba(246,182,92,.22);
+    --bg:#000;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#0c0c0e;
+    min-height:100vh;
+    display:flex;flex-wrap:wrap;gap:54px;
+    align-items:flex-start;justify-content:center;
+    padding:48px 24px 80px;
+    font-family:'Space Mono',monospace;
+    color:#6b6b72;
+  }
+  .stage{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .caption{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#54545c}
+  .caption b{color:var(--amber)}
+
+  /* ── 眼镜 HUD 屏：480×640，黑=透明 ── */
+  .hud{
+    position:relative;width:480px;height:640px;background:var(--bg);
+    border-radius:14px;overflow:hidden;
+    box-shadow:0 0 0 1px #1c1c20, 0 30px 80px -20px #000;
+  }
+  /* 顶部倒影区标记（仅设计稿示意，真机不画） */
+  .reflection-zone{
+    position:absolute;top:0;left:0;right:0;height:160px;
+    background:repeating-linear-gradient(135deg,rgba(255,255,255,.018) 0 8px,transparent 8px 16px);
+    pointer-events:none;
+  }
+  .reflection-zone::after{
+    content:'↑ 顶部倒影区 · 不放视觉重点';
+    position:absolute;top:10px;left:0;right:0;text-align:center;
+    font-size:10px;letter-spacing:.16em;color:#2a2a30;
+  }
+
+  /* 对话流：沉底 + 顶部渐隐至消失 */
+  .stream-wrap{
+    position:absolute;left:0;right:0;bottom:64px;top:0;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding:0 30px;
+    /* 关键：内容向上渐隐到全黑（避开倒影、压低可视高度） */
+    -webkit-mask-image:linear-gradient(to top, #000 0%, #000 38%, rgba(0,0,0,.55) 62%, transparent 84%);
+            mask-image:linear-gradient(to top, #000 0%, #000 38%, rgba(0,0,0,.55) 62%, transparent 84%);
+  }
+  .stream{display:flex;flex-direction:column;gap:20px}
+  .turn{font-family:'DotGothic16',sans-serif;line-height:1.45}
+  .turn .who{
+    font-size:13px;letter-spacing:.22em;color:var(--amber-dim);
+    display:block;margin-bottom:3px;
+  }
+  .turn.you .who::before{content:'▸ '}
+  .turn.rode .who{color:var(--amber);text-shadow:var(--glow)}
+  .turn.rode .who::before{content:'◆ '}
+  .turn .msg{font-size:23px;color:#d7c6a6}
+  .turn.rode .msg{color:var(--amber);text-shadow:var(--glow)}
+
+  /* 底部状态条：唯一恒亮锚点 */
+  .statusbar{
+    position:absolute;left:0;right:0;bottom:0;height:64px;
+    display:flex;align-items:center;gap:12px;padding:0 30px;
+    font-family:'DotGothic16',sans-serif;
+  }
+  .statusbar::before{
+    content:'';position:absolute;left:30px;right:30px;top:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--amber-deep) 18%,var(--amber-deep) 82%,transparent);
+  }
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--amber);
+    box-shadow:var(--glow);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+  .state{font-size:18px;letter-spacing:.12em;color:var(--amber);text-shadow:var(--glow)}
+  .hint{margin-left:auto;font-size:13px;letter-spacing:.1em;color:var(--amber-dim)}
+
+  /* 题头微标 */
+  .wordmark{
+    position:absolute;top:22px;left:0;right:0;text-align:center;
+    font-family:'Micro 5',sans-serif;font-size:40px;letter-spacing:.05em;
+    color:var(--amber-dim);opacity:.5;
+  }
+
+  /* ── 图标组 ── */
+  .icons{display:flex;flex-direction:column;gap:30px;align-items:center}
+  .icon-row{display:flex;gap:26px;align-items:flex-end}
+  .app-icon{
+    width:150px;height:150px;border-radius:34px;position:relative;overflow:hidden;
+    background:radial-gradient(120% 120% at 50% 130%, #1c140a 0%, #000 60%);
+    box-shadow:0 0 0 1px #241a0e, 0 18px 40px -12px #000;
+    display:grid;place-items:center;
+  }
+  /* 点阵 R + 眼镜横杆，纯 CSS 像素网格 */
+  .pix{
+    --u:13px;width:calc(var(--u)*7);height:calc(var(--u)*7);
+    display:grid;grid-template-columns:repeat(7,var(--u));grid-template-rows:repeat(7,var(--u));
+    filter:drop-shadow(0 0 5px rgba(246,182,92,.5));
+  }
+  .pix i{border-radius:2px}
+  .pix i.on{background:var(--amber)}
+  .pix i.dim{background:var(--amber-deep)}
+  .small{ --u:7px;border-radius:16px;width:74px;height:74px}
+  .tiny{ --u:4.5px;border-radius:10px;width:46px;height:46px}
+  .icon-cap{font-size:11px;letter-spacing:.14em;color:#54545c;text-align:center;margin-top:8px}
+
+  .legend{max-width:300px;font-size:13px;line-height:1.7;color:#7a7a82}
+  .legend h3{font-family:'Space Mono';color:var(--amber);font-size:13px;letter-spacing:.1em;margin-bottom:8px;text-transform:uppercase}
+  .legend li{margin:0 0 7px 16px}
+  .legend b{color:#b9b9c2}
+</style>
+</head>
+<body>
+
+  <!-- 眼镜 HUD -->
+  <div class="stage">
+    <div class="caption">眼镜 HUD · <b>480 × 640</b> · 黑 = 透明</div>
+    <div class="hud">
+      <div class="wordmark">RODE</div>
+      <div class="reflection-zone"></div>
+      <div class="stream-wrap">
+        <div class="stream">
+          <div class="turn you"><span class="who">你</span><span class="msg">提醒我下午三点开会</span></div>
+          <div class="turn rode"><span class="who">RODE</span><span class="msg">好，三点的会记下了。要我提前十分钟叫你吗？</span></div>
+        </div>
+      </div>
+      <div class="statusbar">
+        <span class="dot"></span>
+        <span class="state">在听…</span>
+        <span class="hint">单击结束 · 双击退出</span>
+      </div>
+    </div>
+    <div class="caption" style="opacity:.7">内容沉底 · 顶部渐隐至消失 · 仅状态条恒亮</div>
+  </div>
+
+  <!-- 图标 + 说明 -->
+  <div class="stage">
+    <div class="caption">应用图标 · 点阵 R</div>
+    <div class="icons">
+      <div class="icon-row">
+        <div>
+          <div class="app-icon"><div class="pix" id="pix-lg"></div></div>
+          <div class="icon-cap">150px</div>
+        </div>
+        <div>
+          <div class="app-icon small"><div class="pix" id="pix-md"></div></div>
+          <div class="icon-cap">74px</div>
+        </div>
+        <div>
+          <div class="app-icon tiny"><div class="pix" id="pix-sm"></div></div>
+          <div class="icon-cap">46px</div>
+        </div>
+      </div>
+      <div class="legend">
+        <h3>设计逻辑</h3>
+        <ul>
+          <li><b>黑=透明</b>：光波导只点亮像素发光，大留黑 = 视野干净</li>
+          <li><b>沉底渐隐</b>：重点贴底，向上 mask 淡出，避开顶部倒影</li>
+          <li><b>压低高度</b>：常驻只显最后 1 轮，可视内容 &lt; 55% 屏高</li>
+          <li><b>点阵字</b>：DotGothic16，低分辨波导上最清晰，机读质感</li>
+          <li><b>单色琥珀</b>：呼应珊瑚品牌色，暖荧光 readout</li>
+          <li><b>恒亮锚</b>：仅底部状态条（● 在听 / 思考 / 朗读）常亮</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 7×7 点阵 "R"（戴眼镜横杆变体）
+  const R = [
+    "1111100",
+    "1000110",
+    "1000110",
+    "1111100",
+    "1011000",
+    "1001100",
+    "1000110",
+  ];
+  // 眼镜横杆叠加（第 4 行整行点亮做"镜框"暗示）
+  function build(id){
+    const el=document.getElementById(id); el.innerHTML="";
+    for(let r=0;r<7;r++)for(let c=0;c<7;c++){
+      const i=document.createElement('i');
+      i.className = R[r][c]==='1' ? 'on' : 'dim';
+      el.appendChild(i);
+    }
+  }
+  ['pix-lg','pix-md','pix-sm'].forEach(build);
+</script>
+</body>
+</html>
