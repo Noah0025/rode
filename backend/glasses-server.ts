@@ -1,6 +1,6 @@
 // 眼镜 HTTP 入口：POST /glasses/chat（multipart 音频）→ STT → Agent.ask → SSE 回文本。
-// 重构自旧 glasses.ts，但把"等大脑回答"的 pending/deliver 逻辑下放到 Agent 适配器；
-// 本文件只管 HTTP/SSE/STT 编排，大脑无关。无 metis、无 MCP 耦合。
+// "等大脑回答"的 pending/deliver 逻辑下放到 Agent 适配器；
+// 本文件只管 HTTP/SSE/STT 编排，大脑无关，无 channel/MCP 耦合。
 
 import type { SttEngine } from './stt'
 import { normalizeCjkPunct } from './stt'

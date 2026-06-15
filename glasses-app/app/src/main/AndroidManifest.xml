@@ -33,7 +33,7 @@
 
         <!-- setup 经 adb 注入后端 URL+token。exported=true：实测 YodaOS 不让 adb 向非 exported
              receiver 投递(result=0 未送达),release APK 又无法 run-as 直写 prefs,故必须 exported。
-             攻击面=同机其它 app 可投假配置→已用 https 校验 + 仅个人 dev 设备缓解(README 说明)。
+             攻击面=同机其它 app 可投伪造配置→已用 https 校验 + 仅限个人开发设备使用来缓解(README 说明)。
              signature 权限不可行(adb shell 不持该权限,会一并被挡)。 -->
         <receiver
             android:name=".ConfigReceiver"
