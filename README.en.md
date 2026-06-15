@@ -25,11 +25,11 @@ This is **not** a plug-and-play consumer product. To use rode you need:
 ## Architecture
 
 ```
-眼镜 app(录音) ──multipart 音频 POST──► 你的后端(公网入口 → :18790)
-                                          │ whisper.cpp STT
-                                          │ Agent.ask()  ← 任意 AI 大脑(可插拔)
-                              ◄──SSE──────┘ user/status/answer/done/meta
-眼镜 HUD 显示文字（v1 无语音朗读）
+glasses app (record) ──multipart audio POST──► your backend (public ingress → :18790)
+                                                 │ whisper.cpp STT
+                                                 │ Agent.ask()  ← any AI brain (pluggable)
+                                     ◄──SSE──────┘ user/status/answer/done/meta
+glasses HUD shows text (v1: no voice readout)
 ```
 
 - **Protocol contract** (the only interface between glasses ↔ backend): see [`PROTOCOL.en.md`](PROTOCOL.en.md)
@@ -68,7 +68,7 @@ This is **not** a plug-and-play consumer product. To use rode you need:
 ## Glasses-side install (build)
 ```sh
 cd glasses-app
-cp local.properties.example local.properties   # 把 sdk.dir 改成真实 Android SDK 路径(或设 ANDROID_HOME)；URL/token 可留占位,由 setup 经 adb 注入,不烤进 APK
+cp local.properties.example local.properties   # set sdk.dir to your real Android SDK path (or set ANDROID_HOME); URL/token can stay as placeholders — injected by setup via adb, not baked into the APK
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -80,11 +80,11 @@ The URL+token are not baked in at compile time; they are written at runtime by `
 
 **This is not a bug, it is a platform limitation.** The realistic usage for now:
 
-1. **Save the WiFi first**: plug the glasses into USB, connect to your WiFi once in developer mode (`adb shell cmd wifi connect-network "<SSID>" wpa2 "<密码>"`, or connect once in the glasses settings) so it remembers the network.
+1. **Save the WiFi first**: plug the glasses into USB, connect to your WiFi once in developer mode (`adb shell cmd wifi connect-network "<SSID>" wpa2 "<password>"`, or connect once in the glasses settings) so it remembers the network.
 2. **When WiFi gets turned off, force it on with adb** (the app has no permission, but adb does):
    ```sh
-   adb shell svc wifi enable          # 开 WiFi，自动重连已存网络
-   adb shell cmd wifi status          # 确认连上（看到 "connected to ..." 即可）
+   adb shell svc wifi enable          # turn WiFi on; auto-reconnects to the saved network
+   adb shell cmd wifi status          # confirm connected (look for "connected to ...")
    ```
 3. **More stable while charging**: WiFi is less likely to be turned off while plugged in / in use, and turn-based voice is good enough.
 4. **After every glasses reboot** WiFi defaults to off, so you need to `adb shell svc wifi enable` once more.

@@ -33,28 +33,28 @@ The `type` field of `<JSON>` determines the event type:
 | type | Fields | Meaning | Glasses behavior |
 |------|------|------|----------|
 | `user` | `text` | The user's original words as transcribed by STT | Echo "what the user said" |
-| `status` | `text` | Processing status (e.g. `"思考中"`) | HUD shows status |
+| `status` | `text` | Processing status (e.g. `"Thinking"`) | HUD shows status |
 | `answer` | `text` | The brain's answer | Display + read aloud (if TTS available) |
 | `done` | — | This turn is over | Connection closes, return to IDLE |
 | `error` | `text` | Error message | Display the error, return to IDLE |
 | `meta` | `model`, `usage5h`, `usage7d` | Optional status-bar meta info | Show in status bar |
 
 ### Timing convention
-1. After the connection is established, the backend **first sends** `user` (echo the transcription) + `status` ("思考中")
-2. During processing the connection **stays open** (the glasses HUD keeps showing "思考中")
+1. After the connection is established, the backend **first sends** `user` (echo the transcription) + `status` ("Thinking")
+2. During processing the connection **stays open** (the glasses HUD keeps showing "Thinking")
 3. The brain produces a result → send `answer` → immediately followed by `done` → **close the connection**
 4. **One turn, one answer**: a single request corresponds to one `answer` + `done`, then the connection closes. The next utterance is a new POST.
 5. On error (STT failure / brain timeout) → send `error` + `done` (HTTP is still 200, the error is in the event)
 
 ### Event JSON example
 ```
-data: {"type":"user","text":"今天天气怎么样"}
+data: {"type":"user","text":"what's the weather today"}
 
-data: {"type":"status","text":"思考中"}
+data: {"type":"status","text":"Thinking"}
 
 data: {"type":"meta","model":"Sonnet 4.6","usage5h":"29%","usage7d":"3%"}
 
-data: {"type":"answer","text":"柏林今天阴天，最高22度，出门带件外套。"}
+data: {"type":"answer","text":"Cloudy in Berlin today, high 22°C — bring a jacket."}
 
 data: {"type":"done"}
 
@@ -62,8 +62,8 @@ data: {"type":"done"}
 
 ## Minimal self-test (curl)
 ```bash
-# Test the whole chain with a Chinese 16k wav
-say -v Tingting -o /tmp/t.aiff "今天天气怎么样" && afconvert /tmp/t.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav
+# Test the whole chain with a 16k wav
+say -o /tmp/t.aiff "what's the weather today" && afconvert /tmp/t.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav
 curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav https://<your-backend>/glasses/chat
 # Expect to receive user / status / (meta) / answer / done events in order
 # No token → expect 401

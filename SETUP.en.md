@@ -20,14 +20,14 @@
 
 ### 0. Install dependencies (mandatory, otherwise the backend crashes on startup)
 ```sh
-bun install        # 装 @anthropic-ai/claude-agent-sdk 等；全新 clone 必须先跑
+bun install        # installs @anthropic-ai/claude-agent-sdk etc.; required first on a fresh clone
 ```
 **Verify**: `ls node_modules/@anthropic-ai/claude-agent-sdk` exists.
 > The managed script runs `bun backend/index.ts` (not `bun start`), which does not auto-install dependencies — skipping this step will crash when importing the SDK.
 
 ### 1. Install STT (whisper.cpp)
 ```sh
-scripts/install-whisper.sh        # 幂等：装 whisper-cpp + 下 ggml-medium
+scripts/install-whisper.sh        # idempotent: install whisper-cpp + download ggml-medium
 whisper-server -m models/ggml-medium.bin -l zh --host 127.0.0.1 --port 18791 &
 ```
 **Verify**: `curl -s -F file=@<some 16k.wav> -F response_format=json http://127.0.0.1:18791/inference` returns `{"text":...}`.
@@ -35,7 +35,7 @@ whisper-server -m models/ggml-medium.bin -l zh --host 127.0.0.1 --port 18791 &
 ### 2. Generate a token + write .env
 ```sh
 cp .env.example .env
-echo "RODE_GLASSES_TOKEN=$(openssl rand -hex 24)" >> .env   # 每机随机,只进本机 .env
+echo "RODE_GLASSES_TOKEN=$(openssl rand -hex 24)" >> .env   # random per machine, stays in the local .env only
 ```
 **Verify**: `grep -c '^RODE_GLASSES_TOKEN=' .env` should be **1** (the value is 48 hex characters); `.env` is already gitignored (never commit it).
 > The token line in `.env.example` is commented out, so the `cp`+`echo` above will not produce a duplicate line. If you manually edited the example, make sure there is only one `RODE_GLASSES_TOKEN=` in `.env` — the loader takes the first one, and a duplicate will let the placeholder override the real token, causing authentication to always 401.
@@ -44,7 +44,7 @@ echo "RODE_GLASSES_TOKEN=$(openssl rand -hex 24)" >> .env   # 每机随机,只�
 ### 3. Start the backend (managed)
 ```sh
 scripts/start-backend-launchd.sh   # macOS
-# 或 scripts/start-backend-systemd.sh  # Linux
+# or scripts/start-backend-systemd.sh  # Linux
 ```
 **Verify**: `curl -s localhost:18790/` → `rode ok`; `curl -s -o /dev/null -w '%{http_code}' -XPOST localhost:18790/glasses/chat` → `401` (rejected without a token).
 
@@ -52,7 +52,7 @@ scripts/start-backend-launchd.sh   # macOS
 Tailscale Funnel by default:
 ```sh
 tailscale funnel --bg 18790
-tailscale funnel status      # 记下 https://<node>.<tailnet>.ts.net
+tailscale funnel status      # note down https://<node>.<tailnet>.ts.net
 ```
 **Verify**: from **another machine / off-network** `curl -s https://<node>.ts.net/` → `rode ok`. PUBLIC_URL = `https://<node>.ts.net/glasses/chat`.
 > Switching provider: just implement `ExposeProvider` and produce the PUBLIC_URL yourself; the backend does not care which one you use.
@@ -60,7 +60,7 @@ tailscale funnel status      # 记下 https://<node>.<tailnet>.ts.net
 ### 5. Pair the glasses (write URL+token via adb)
 Plug the glasses in via USB:
 ```sh
-scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<你的RODE_GLASSES_TOKEN>"
+scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<your RODE_GLASSES_TOKEN>"
 ```
 (Inside the script: first start the app to bring it out of the stopped state, then explicitly `-n` the component to broadcast SET_CONFIG, then restart the app. This is the only reliable approach under Android's implicit-broadcast restrictions.)
 **Verify**: `adb shell run-as com.example.rokidvsikea cat shared_prefs/rode_config.xml` (debug build) shows the written chat_url.
@@ -70,10 +70,10 @@ On the glasses (make sure WiFi is connected), single-click to talk and ask somet
 Or curl directly on the backend machine (`audio` is the multipart field name, see PROTOCOL.en.md; note it differs from the `file` field of the step 1 whisper endpoint):
 ```sh
 TOKEN=$(grep '^RODE_GLASSES_TOKEN=' .env | cut -d= -f2)
-PUBLIC_URL="https://<node>.ts.net/glasses/chat"   # step 4 拿到的；本地自测可用 http://localhost:18790/glasses/chat
+PUBLIC_URL="https://<node>.ts.net/glasses/chat"   # from step 4; for local testing use http://localhost:18790/glasses/chat
 curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav "$PUBLIC_URL"
 ```
-You should see four kinds of SSE events: `user → status → answer → done`. (No wav on hand? `say -o /tmp/a.aiff "今天天气怎么样" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`)
+You should see four kinds of SSE events: `user → status → answer → done`. (No wav on hand? `say -o /tmp/a.aiff "what's the weather today" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`)
 
 ## Swapping the brain (connecting a non-Claude agent)
 Implement `Agent.ask(text, ctx): AsyncIterable<string>` from `backend/agent/types.ts`, and in `backend/index.ts` replace the default `ClaudeCodeAgent` with your implementation. The protocol (`PROTOCOL.en.md`) stays the same.
