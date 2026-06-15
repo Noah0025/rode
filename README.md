@@ -54,7 +54,7 @@
 - **无语音朗读**：眼镜缺中文 TTS 语音包 → 答案只在 HUD 显示文字，不出声（朗读=后端合成音频回传，路线图）
 - **无视觉**：不拍照/不传图（摄像头权限有但未接）
 - **WiFi 不能自动常驻**：电池/休眠被 YodaOS 关、app 无权开 → 靠 adb 兜底或充电时用（详见下「WiFi 已知限制」）
-- **非流式**：一轮一答（攒齐再显），不是逐字蹦（流式在路线图）
+- **非流式**：一轮一答（整段返回），非逐字流式输出（流式见路线图）
 - **非常听**：单击触发的回合制，不主动监听（省电 + 隐私的设计选择）
 - **不离线**：全部计算在你的服务器后端，眼镜只做输入输出；断网即不可用
 - **首轮冷启**：默认 Claude 大脑首轮 SDK 冷启可能数十秒，多轮 `resume` 后变快
@@ -75,7 +75,7 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 
 ## ⚠️ WiFi 已知限制（务必先读，否则眼镜连不上后端）
 
-**核心问题**：眼镜（YodaOS）在**电池供电 / 休眠**时会自动关掉 WiFi，而**普通 app 无权重新打开它**——Android 12 拦截非系统 app 的 `setWifiEnabled()`，rode app 试了也返回 false。眼镜原生的 AI 靠**蓝牙连手机**上网、不靠 WiFi，所以 Rokid 没动力让 WiFi 常驻。**结果**：眼镜重启或闲置一阵后 WiFi 就关了，HUD 报「没连上后端」。
+**核心问题**：眼镜（YodaOS）在**电池供电 / 休眠**时会自动关闭 WiFi，而**普通 app 无权重新开启**——Android 12 拦截非系统 app 的 `setWifiEnabled()`，rode app 调用同样返回 false。眼镜原生 AI 通过**蓝牙连手机**上网、不依赖 WiFi，因此 Rokid 平台未保持 WiFi 常驻。**结果**：眼镜重启或闲置一段时间后 WiFi 即关闭，HUD 提示「没连上后端」。
 
 **这不是 bug，是平台限制。** 现阶段的现实用法：
 
@@ -88,12 +88,12 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 3. **充电时更稳**：插着电/在用时 WiFi 不容易被关，回合制语音够用。
 4. **每次重启眼镜后** WiFi 默认关，需再 `adb shell svc wifi enable` 一次。
 
-**想彻底解决**：要么让 app 持有 WiFi 控制权（需 Device Owner，得 factory reset，本项目不走），要么走**蓝牙经手机**的低功耗形态（Rokid 官方路线，见路线图 R1）。当前 v1 接受「WiFi 靠 adb 兜底 + 充电时用」的现实。
+**彻底的解法**：要么让 app 持有 WiFi 控制权（需 Device Owner，须 factory reset，本项目不采用），要么改用**蓝牙经手机**的低功耗形态（Rokid 官方路线，见路线图 R1）。v1 采用「adb 兜底 + 充电时使用」的折中方案。
 
 ## 安全
 - 每台后端**随机生成 token**，只进本机 `.env` 和眼镜 prefs；仓库零密钥（`scripts/check-no-secrets.sh` 扫描）
 - 后端：限流 / body 限制 / 日志脱敏；公网暴露等于暴露本机 AI 能力，请在受限权限内运行大脑
-- 配置注入的 `ConfigReceiver` 是 exported（adb 投递所需）+ 仅接受 https URL；同机其它 app 理论上可投假配置，个人 dev 设备风险可接受
+- 配置注入的 `ConfigReceiver` 为 exported（adb 投递所需）且仅接受 https URL；同机其它 app 理论上可投递伪造配置，在个人开发设备上风险可接受
 
 ## 与相关项目
 

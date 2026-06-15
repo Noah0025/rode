@@ -60,7 +60,7 @@ tailscale funnel status      # 记下 https://<node>.<tailnet>.ts.net
 ```sh
 scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<你的RODE_GLASSES_TOKEN>"
 ```
-（脚本内部：先启动 app 脱离 stopped → 显式 `-n` 组件 broadcast SET_CONFIG → 重启 app。这是 Android 隐式广播限制下唯一可靠的姿势。）
+（脚本内部：先启动 app 脱离 stopped → 显式 `-n` 组件 broadcast SET_CONFIG → 重启 app。这是 Android 隐式广播限制下唯一可靠的做法。）
 **验证**：`adb shell run-as com.example.rokidvsikea cat shared_prefs/rode_config.xml`（debug 包）能看到写入的 chat_url。
 
 ### 6. 端到端验收
@@ -75,6 +75,3 @@ curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav "$PUBLIC_URL"
 
 ## 换大脑（接非 Claude 的 agent）
 实现 `backend/agent/types.ts` 的 `Agent.ask(text, ctx): AsyncIterable<string>`，在 `backend/index.ts` 把默认的 `ClaudeCodeAgent` 换成你的实现即可。协议（`PROTOCOL.md`）不变。
-
-## 从旧版/私有部署迁移
-旧入口是 `server.ts`（含 metis 灵珠桥）。公开版入口已改为 `backend/index.ts`，`package.json` 的 `start` 已指向它。若你之前跑私有部署，pull 后把托管服务的启动命令指到 `bun backend/index.ts` 并重启。
