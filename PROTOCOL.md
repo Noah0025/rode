@@ -1,5 +1,7 @@
 # rode 眼镜 ↔ 后端 协议契约
 
+> **中文** | [English](PROTOCOL.en.md)
+
 > 这是 rode 的**唯一接口**。任何后端实现（任何 AI 大脑、任何语言）只要满足本契约，就能驱动 rode 眼镜 app。眼镜 app 不关心后端怎么实现。
 
 ## 入站：POST /glasses/chat

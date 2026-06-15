@@ -1,5 +1,7 @@
 # rode
 
+> **中文** | [English](README.en.md)
+
 **Rokid AR 眼镜语音 → 你自己的 AI 大脑 → 眼镜 HUD。** 单击说话，眼镜录音发到你自建的后端，转写、喂给你选的 AI（默认 Claude），回答显示在 HUD 上。大脑和公网入口都可插拔。
 
 <div align="center">
