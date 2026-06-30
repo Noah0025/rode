@@ -55,12 +55,15 @@ export class ClaudeCodeAgent implements Agent {
     const prompt = ctx.imagePath
       ? `${text}\n[用户眼前画面在图片：${ctx.imagePath}，需要时用 Read 工具看]`
       : text
+    // 流式后只有"还没吐过字"才能安全清 session 重来——否则重试会把半截答案重复吐一遍。
+    let yielded = false
     try {
-      yield* this.runOnce(prompt)
+      for await (const chunk of this.runOnce(prompt)) { yielded = true; yield chunk }
     } catch (err) {
       // resume 的 session 可能已失效（重启后 SDK 清了/找不到）→ 清掉 sessionId 重来一轮：
       // 丢这条线程的旧上下文，但不至于把助手永久卡死在 resume 失败上。
-      if (this.sessionId) {
+      // 仅当本轮一个字都没吐过时才兜底重试（已吐字则直接抛，避免重复输出）。
+      if (this.sessionId && !yielded) {
         this.setSession(undefined)
         yield* this.runOnce(prompt)
       } else {
@@ -69,8 +72,8 @@ export class ClaudeCodeAgent implements Agent {
     }
   }
 
-  // 跑一个完整 agentic 回合，累积全部文本后 yield 一次（与眼镜协议一致）。
-  // 在 yield 之前抛出 → 上层可安全清 session 重试（还没吐过字）。
+  // 跑一个完整 agentic 回合，每个 text block 一到就逐块 yield（流式）。
+  // 第一块 yield 之前抛出 → 上层可安全清 session 重试（还没吐过字）。
   private async *runOnce(prompt: string): AsyncIterable<string> {
     const options: Record<string, unknown> = {
       cwd: this.opts.cwd ?? process.cwd(),
@@ -84,18 +87,16 @@ export class ClaudeCodeAgent implements Agent {
         : {}),
       ...(this.sessionId ? { resume: this.sessionId } : {}), // 第二轮起续上次会话
     }
-    let full = ''
     for await (const msg of this.runQuery({ prompt, options })) {
       if (msg.type === 'assistant') {
         const m = msg as Extract<SdkMessage, { type: 'assistant' }>
         if (m.session_id) this.setSession(m.session_id)
         if (m.message?.model) this.lastModel = m.message.model
         for (const block of m.message?.content ?? []) {
-          if (block.type === 'text' && block.text) full += block.text
+          if (block.type === 'text' && block.text) yield block.text // 逐块吐,不再攒齐
         }
       }
     }
-    yield full.trim()
   }
 }
 

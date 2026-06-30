@@ -22,6 +22,8 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private var client: RodeClient? = null
+    private var streamingView: TextView? = null      // 当前正在流式生成的 Rode 行(null=无)
+    private val streamingText = StringBuilder()       // 该行累积文本
     private val transcript: TranscriptStore by lazy { TranscriptStore(applicationContext) }
 
     companion object {
@@ -217,8 +219,41 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
     }
 
     override fun onUserText(text: String) = runOnUiThread { addTurn(text, isRode = false) }
-    override fun onAssistantText(text: String) = runOnUiThread { addTurn(text, isRode = true) }
-    override fun onError(message: String) = runOnUiThread { appendSystem(message) }
+
+    // 流式增量：追加到当前正在生成的 Rode 行(首块时建行),不落盘
+    override fun onAssistantDelta(text: String) = runOnUiThread {
+        if (text.isEmpty()) return@runOnUiThread
+        var tv = streamingView
+        if (tv == null) {
+            streamingText.setLength(0)
+            tv = newLineView(isRode = true)
+            streamingView = tv
+        }
+        streamingText.append(text)
+        tv.text = streamingText
+        binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+    }
+
+    // 终态完整答案：定稿流式行(用权威全文)+落盘并清句柄;无流式行则按非流式新建一行
+    override fun onAssistantText(text: String) = runOnUiThread {
+        val tv = streamingView
+        if (tv != null) {
+            if (text.isNotBlank()) {
+                tv.text = text                 // 权威全文定稿(吸收任何归一差异)
+                transcript.append(true, text)  // 落盘一次(此处不会触发会话分隔线:紧接用户轮)
+            }
+            streamingView = null
+            streamingText.setLength(0)
+            binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        } else {
+            addTurn(text, isRode = true)       // 非流式/兜底
+        }
+    }
+
+    override fun onError(message: String) = runOnUiThread {
+        streamingView = null; streamingText.setLength(0) // 出错丢弃半截流式行句柄
+        appendSystem(message)
+    }
 
     // 后端 status(STT 转写完成)到了,此时才显「思考中…」——别在话没转写完就喊思考
     override fun onStatus(text: String) = runOnUiThread { binding.waveform.showThinking = true }
@@ -241,11 +276,9 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
         binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
     }
 
-    /** 把一行对话画到屏幕上（不落盘）；实时新增和加载历史共用。 */
-    private fun renderTurn(text: String, isRode: Boolean) {
-        if (text.isBlank()) return
+    /** 新建一个空对话行 TextView 并加入容器，返回它（实时新增/历史/流式共用建行样式）。 */
+    private fun newLineView(isRode: Boolean): TextView {
         val tv = TextView(this).apply {
-            this.text = text
             setTextColor(if (isRode) GREEN else GREEN_DIM)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)   // 正文 12sp
             // 用户=右、Rode=左；不加辉光，低分屏上保清晰
@@ -256,6 +289,13 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = 10 }
         binding.conversation.addView(tv, lp)
+        return tv
+    }
+
+    /** 把一行对话画到屏幕上（不落盘）；实时新增和加载历史共用。 */
+    private fun renderTurn(text: String, isRode: Boolean) {
+        if (text.isBlank()) return
+        newLineView(isRode).text = text
     }
 
     /** 打开 app 时恢复上次的对话记录（最近 ~50 轮，含按时间分段的「聊到」分隔线），滚到底显示最新。 */

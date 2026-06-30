@@ -19,6 +19,13 @@ class SseParseTest {
     }
 
     @Test
+    fun parses_answer_delta_event() {
+        val ev = parseSseDataLine("""data: {"type":"answer_delta","text":"晴，"}""")
+        assertEquals("answer_delta", ev?.type)
+        assertEquals("晴，", ev?.text)
+    }
+
+    @Test
     fun done_event_has_null_text() {
         val ev = parseSseDataLine("""data: {"type":"done"}""")
         assertEquals("done", ev?.type)

@@ -83,12 +83,17 @@ export function createGlassesServer(opts: GlassesServerOpts) {
           if (!answered) { enq({ type: 'error', text: '超时了' }); enq({ type: 'done' }); try { controller.close() } catch {} }
         }, opts.ttlMs)
 
+        let raw = '' // 原始(未归一)累积,终态统一归一,避免标点跨块边界漏转
         try {
           for await (const chunk of opts.agent.ask(text, { turnId, imagePath })) {
             answered = true
             sendMeta() // 首轮：开头 model 还 undefined,大脑一出声 model 就有了,这里补发,状态栏不再空
-            enq({ type: 'answer', text: normalizeCjkPunct(chunk) }) // 中文标点统一全角，和转写一致
+            raw += chunk
+            enq({ type: 'answer_delta', text: normalizeCjkPunct(chunk) }) // 逐块流式;中文标点统一全角
           }
+          // 终态完整答案：眼镜端据此定稿落盘 + TTS（v1 单条 answer 语义保留）
+          const full = normalizeCjkPunct(raw).trim()
+          if (full) enq({ type: 'answer', text: full })
         } catch (err) {
           process.stderr.write(redact('glasses: agent failed: ' + err) + '\n')
           if (!answered) enq({ type: 'error', text: '出错了' })

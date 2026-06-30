@@ -41,6 +41,9 @@ class RodeClient(
     interface Listener {
         fun onState(state: RodeState)
         fun onUserText(text: String)
+        /** 流式增量块：追加到当前正在生成的 Rode 行（不落盘）。 */
+        fun onAssistantDelta(text: String)
+        /** 终态完整答案：定稿当前 Rode 行并落盘（流式收尾；非流式时新建一行）。 */
         fun onAssistantText(text: String)
         fun onError(message: String)
         /** 后端状态事件（STT 转写完成后发「思考中」）；用于此时才显思考中文字。 */
@@ -215,12 +218,20 @@ class RodeClient(
                     "meta" -> withContext(Dispatchers.Main) {
                         listener.onMeta(ev.model ?: "", ev.usage5h ?: "", ev.usage7d ?: "")
                     }
+                    "answer_delta" -> {
+                        answered = true
+                        val d = ev.text ?: ""
+                        withContext(Dispatchers.Main) {
+                            if (state != RodeState.SPEAKING) setState(RodeState.SPEAKING) // 进入回答态(波形)
+                            listener.onAssistantDelta(d) // 追加同一行,不落盘、不 TTS(等终态全文)
+                        }
+                    }
                     "answer" -> {
                         answered = true
                         val text = ev.text ?: ""
                         withContext(Dispatchers.Main) {
-                            listener.onAssistantText(text)
-                            if (ttsReady) { setState(RodeState.SPEAKING); tts.speak(text) }
+                            listener.onAssistantText(text) // 定稿+落盘(流式收尾;非流式则新建行)
+                            if (ttsReady) { setState(RodeState.SPEAKING); tts.speak(text) } // 整段一次性朗读
                             else setState(RodeState.IDLE) // text-only: rest
                         }
                     }

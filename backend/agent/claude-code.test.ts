@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { ClaudeCodeAgent, type SdkQuery } from './claude-code'
 
-test('ask 累积 assistant text blocks,yield 完整回答', async () => {
+test('ask 逐块 yield assistant text blocks(流式)', async () => {
   const fakeQuery: SdkQuery = async function* () {
     yield { type: 'assistant', session_id: 's1', message: { content: [{ type: 'text', text: '晴，' }, { type: 'text', text: '22度' }] } }
     yield { type: 'result', subtype: 'success' }
@@ -12,7 +12,31 @@ test('ask 累积 assistant text blocks,yield 完整回答', async () => {
   const agent = new ClaudeCodeAgent({ query: fakeQuery })
   const out: string[] = []
   for await (const c of agent.ask('天气', { turnId: 'g:1' })) out.push(c)
-  expect(out).toEqual(['晴，22度'])
+  expect(out).toEqual(['晴，', '22度']) // 逐块,不再攒齐成一条
+})
+
+test('已吐字后报错不重试(避免重复输出半截答案)', async () => {
+  const calls: (string | undefined)[] = []
+  let round = 0
+  const q: SdkQuery = async function* (p) {
+    round++
+    if (round === 1) { // 第一轮干净成功,建立 sessionId
+      yield { type: 'assistant', session_id: 'sX', message: { content: [{ type: 'text', text: '热身' }] } }
+      return
+    }
+    calls.push(p.options.resume as string | undefined)
+    yield { type: 'assistant', session_id: 'sX', message: { content: [{ type: 'text', text: '半截' }] } }
+    throw new Error('mid-stream boom') // 已吐过字才炸
+  }
+  const agent = new ClaudeCodeAgent({ query: q })
+  for await (const _ of agent.ask('warm', { turnId: 'g:0' })) { void _ }
+  const out: string[] = []
+  let threw = false
+  try { for await (const c of agent.ask('hi', { turnId: 'g:1' })) out.push(c) }
+  catch { threw = true }
+  expect(out).toEqual(['半截']) // 只吐了一次,没因重试再吐一遍
+  expect(threw).toBe(true)      // 已吐字 → 直接抛,不吞错重试
+  expect(calls.length).toBe(1)  // 只调用一次 query(没重试)
 })
 
 test('记住 session_id,第二轮带 resume + bypassPermissions', async () => {
