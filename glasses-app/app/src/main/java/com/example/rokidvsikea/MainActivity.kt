@@ -22,8 +22,14 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private var client: RodeClient? = null
-    private var streamingView: TextView? = null      // 当前正在流式生成的 Rode 行(null=无)
-    private val streamingText = StringBuilder()       // 该行累积文本
+    private var streamingView: TextView? = null       // 当前正在流式生成的 Rode 行(null=无)
+    private val streamTarget = StringBuilder()         // 已到达的完整文本(打字机揭示目标)
+    private var revealedLen = 0                        // 已揭示字符数
+    private var streamEnded = false                    // 终态 answer 是否已到
+    private var streamFinal: String? = null            // 权威全文(终态定稿用)
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var ticking = false
+    private val lingerRunnable = Runnable { client?.onAnswerRendered() } // linger 后才收呼吸回 IDLE
     private val transcript: TranscriptStore by lazy { TranscriptStore(applicationContext) }
 
     companion object {
@@ -202,6 +208,7 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
     override fun onDestroy() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         try { unregisterReceiver(statusReceiver) } catch (_: Throwable) {}
+        uiHandler.removeCallbacks(tickRunnable); uiHandler.removeCallbacks(lingerRunnable) // 停节拍器+linger
         pingScope.cancel()
         client?.release()
         client = null
@@ -220,39 +227,76 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
 
     override fun onUserText(text: String) = runOnUiThread { addTurn(text, isRode = false) }
 
-    // 流式增量：追加到当前正在生成的 Rode 行(首块时建行),不落盘
+    // 流式增量：进打字机缓冲(首块时建行),由节拍器匀速揭示——与网络突发解耦,不落盘
     override fun onAssistantDelta(text: String) = runOnUiThread {
         if (text.isEmpty()) return@runOnUiThread
-        var tv = streamingView
-        if (tv == null) {
-            streamingText.setLength(0)
-            tv = newLineView(isRode = true)
-            streamingView = tv
+        if (streamingView == null) {
+            uiHandler.removeCallbacks(lingerRunnable) // 新一轮开始,取消上一轮可能 pending 的 linger
+            streamingView = newLineView(isRode = true)
+            streamTarget.setLength(0); revealedLen = 0; streamEnded = false; streamFinal = null
         }
-        streamingText.append(text)
-        tv.text = streamingText
-        binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        streamTarget.append(text)
+        startTicker()
     }
 
-    // 终态完整答案：定稿流式行(用权威全文)+落盘并清句柄;无流式行则按非流式新建一行
+    // 终态完整答案：标记结束 + 权威全文为揭示目标;节拍器抽干剩余后定稿落盘。无流式行则新建一行
     override fun onAssistantText(text: String) = runOnUiThread {
-        val tv = streamingView
-        if (tv != null) {
-            if (text.isNotBlank()) {
-                tv.text = text                 // 权威全文定稿(吸收任何归一差异)
-                transcript.append(true, text)  // 落盘一次(此处不会触发会话分隔线:紧接用户轮)
-            }
-            streamingView = null
-            streamingText.setLength(0)
-            binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        if (streamingView != null) {
+            streamFinal = if (text.isNotBlank()) text else streamTarget.toString()
+            streamTarget.setLength(0); streamTarget.append(streamFinal) // 权威全文(吸收归一差异)
+            streamEnded = true
+            startTicker()
         } else {
-            addTurn(text, isRode = true)       // 非流式/兜底
+            addTurn(text, isRode = true) // 非流式/兜底
+            client?.onAnswerRendered()   // 立即显示完 → 收呼吸回 IDLE
         }
     }
 
     override fun onError(message: String) = runOnUiThread {
-        streamingView = null; streamingText.setLength(0) // 出错丢弃半截流式行句柄
+        uiHandler.removeCallbacks(tickRunnable); uiHandler.removeCallbacks(lingerRunnable); ticking = false // 停节拍器+linger
+        streamingView = null; streamTarget.setLength(0); revealedLen = 0
+        streamEnded = false; streamFinal = null                  // 出错丢弃半截流式行
         appendSystem(message)
+    }
+
+    /** 启动打字机节拍器(幂等)。 */
+    private fun startTicker() {
+        if (ticking) return
+        ticking = true
+        uiHandler.post(tickRunnable)
+    }
+
+    private val tickRunnable = object : Runnable {
+        override fun run() {
+            val tv = streamingView ?: run { ticking = false; return }
+            val n = Typewriter.step(revealedLen, streamTarget.length)
+            if (n > 0) {
+                revealedLen = minOf(revealedLen + n, streamTarget.length)
+                tv.text = streamTarget.substring(0, revealedLen)
+                binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+            }
+            if (revealedLen < streamTarget.length || !streamEnded) {
+                uiHandler.postDelayed(this, Typewriter.TICK_MS) // 还没追平 或 流未结束 → 继续
+            } else {
+                finalizeStream() // 追平且已结束 → 定稿落盘
+            }
+        }
+    }
+
+    /** 流结束且全部揭示后：用权威全文定稿 + 落盘一次,清流式状态。 */
+    private fun finalizeStream() {
+        ticking = false
+        val tv = streamingView
+        val full = streamFinal
+        if (tv != null && !full.isNullOrBlank()) {
+            tv.text = full
+            transcript.append(true, full) // 落盘一次(紧接用户轮,不触发会话分隔线)
+            binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
+        streamingView = null; streamTarget.setLength(0); revealedLen = 0
+        streamEnded = false; streamFinal = null
+        // 字全部揭示完 → 呼吸再陪 LINGER_MS(让用户读完)才收回 IDLE
+        uiHandler.postDelayed(lingerRunnable, Typewriter.LINGER_MS)
     }
 
     // 后端 status(STT 转写完成)到了,此时才显「思考中…」——别在话没转写完就喊思考

@@ -91,6 +91,7 @@ class RodeClient(
     fun currentAmplitude(): Float = recorder.amplitude
 
     private fun setState(s: RodeState) {
+        Log.d(TAG, "state→$s") // 诊断:状态切换时间线(排查呼吸时序)
         state = s
         listener.onState(s)
     }
@@ -109,6 +110,11 @@ class RodeClient(
             RodeState.THINKING -> { cancelTurn(); setState(RodeState.IDLE) }
             RodeState.SPEAKING -> { tts.stop(); startListening() } // barge-in → speak again
         }
+    }
+
+    /** UI 把答案逐字揭示完后调用：结束朗读态回 IDLE（无 TTS 的文字流式收尾，让呼吸持续到字显示完）。 */
+    fun onAnswerRendered() {
+        if (state == RodeState.SPEAKING || state == RodeState.THINKING) setState(RodeState.IDLE)
     }
 
     /** 双击取消：说话中丢弃录音 / 思考中取消请求，回 IDLE（不发给后端）。供误触撤回。 */
@@ -232,7 +238,8 @@ class RodeClient(
                         withContext(Dispatchers.Main) {
                             listener.onAssistantText(text) // 定稿+落盘(流式收尾;非流式则新建行)
                             if (ttsReady) { setState(RodeState.SPEAKING); tts.speak(text) } // 整段一次性朗读
-                            else setState(RodeState.IDLE) // text-only: rest
+                            // 无 TTS:不在此回 IDLE;保持 SPEAKING(呼吸),等 UI 打字机把字揭示完
+                            // 再由 onAnswerRendered() 回 IDLE——否则字还在蹦、呼吸就没了。
                         }
                     }
                     "error" -> withContext(Dispatchers.Main) {

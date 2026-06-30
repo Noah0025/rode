@@ -1,5 +1,5 @@
 <resources>
-    <string name="idle_hint">Tap: talk / send　　Double-tap: cancel / exit</string>
+    <string name="idle_hint">"Tap: talk / send      Double-tap: cancel / exit"</string>
     <string name="status_recognizing">Recognizing</string>
     <string name="status_thinking">Thinking</string>
     <string name="msg_cancelled">Cancelled</string>

@@ -65,8 +65,8 @@ class WaveformView @JvmOverloads constructor(
         if (mode == Mode.IDLE) { micLevel = 0f; invalidate(); return }
         val period = when (mode) {
             Mode.THINKING -> 2400L
-            Mode.ANSWER -> 850L
-            else -> 2200L   // LISTENING 绿点慢呼吸
+            Mode.ANSWER -> 2200L  // 答案逐字揭示期:平静慢呼吸(原 850ms 快脉冲太急,陪读不舒服)
+            else -> 2200L         // LISTENING 绿点慢呼吸
         }
         anim = ValueAnimator.ofFloat(0f, (Math.PI * 2).toFloat()).apply {
             duration = period; repeatCount = ValueAnimator.INFINITE

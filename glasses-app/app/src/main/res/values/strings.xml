@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Rode</string>
-    <string name="idle_hint">单击：说话／发送　　双击：取消／退出</string>
+    <string name="idle_hint">"单击：说话／发送      双击：取消／退出"</string>
     <string name="status_recognizing">识别中</string>
     <string name="status_thinking">思考中</string>
     <string name="msg_cancelled">已取消</string>
