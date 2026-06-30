@@ -7,8 +7,10 @@ import type { Agent, AgentCtx } from './types'
 
 // 抽象 SDK 的 query（便于测试注入，运行时用真 SDK）
 export type SdkTextBlock = { type: string; text?: string }
+export type SdkStreamEvent = { type?: string; delta?: { type?: string; text?: string } }
 export type SdkMessage =
   | { type: 'assistant'; session_id?: string; message?: { content?: SdkTextBlock[]; model?: string } }
+  | { type: 'stream_event'; session_id?: string; event?: SdkStreamEvent } // token 级 partial(includePartialMessages)
   | { type: 'result'; subtype?: string; [k: string]: unknown }
   | { type: string; [k: string]: unknown }
 export type SdkQuery = (params: { prompt: string; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>
@@ -78,6 +80,7 @@ export class ClaudeCodeAgent implements Agent {
     const options: Record<string, unknown> = {
       cwd: this.opts.cwd ?? process.cwd(),
       permissionMode: 'bypassPermissions', // 无人值守，工具自动通过
+      includePartialMessages: true,        // 开 token 级 partial(stream_event),实现逐字流式
       env: { ...process.env },             // SDK 的 env 是替换不是合并，必须 spread
       ...(this.opts.model ? { model: this.opts.model } : {}),
       ...(this.opts.maxTurns ? { maxTurns: this.opts.maxTurns } : {}),
@@ -87,13 +90,26 @@ export class ClaudeCodeAgent implements Agent {
         : {}),
       ...(this.sessionId ? { resume: this.sessionId } : {}), // 第二轮起续上次会话
     }
+    // 开了 partial 后:token 增量走 stream_event;完整 assistant 文本是同一内容的重复,需跳过(去重)。
+    // 没 partial 流(非流式 SDK/测试)时回退到用 assistant 的 text block,保证仍有输出。
+    let streamedAny = false
     for await (const msg of this.runQuery({ prompt, options })) {
-      if (msg.type === 'assistant') {
+      if (msg.type === 'stream_event') {
+        const sm = msg as Extract<SdkMessage, { type: 'stream_event' }>
+        if (sm.session_id) this.setSession(sm.session_id)
+        const ev = sm.event
+        if (ev?.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && ev.delta.text) {
+          streamedAny = true
+          yield ev.delta.text // 逐 token 吐
+        }
+      } else if (msg.type === 'assistant') {
         const m = msg as Extract<SdkMessage, { type: 'assistant' }>
         if (m.session_id) this.setSession(m.session_id)
-        if (m.message?.model) this.lastModel = m.message.model
-        for (const block of m.message?.content ?? []) {
-          if (block.type === 'text' && block.text) yield block.text // 逐块吐,不再攒齐
+        if (m.message?.model) this.lastModel = m.message.model // model 从完整 assistant 取
+        if (!streamedAny) {
+          for (const block of m.message?.content ?? []) {
+            if (block.type === 'text' && block.text) yield block.text // 回退:逐 block
+          }
         }
       }
     }

@@ -15,6 +15,34 @@ test('ask 逐块 yield assistant text blocks(流式)', async () => {
   expect(out).toEqual(['晴，', '22度']) // 逐块,不再攒齐成一条
 })
 
+test('includePartialMessages: 逐 token yield stream_event,跳过完整 assistant 文本(不重复)', async () => {
+  let opts: Record<string, unknown> = {}
+  const q: SdkQuery = async function* (p) {
+    opts = p.options
+    yield { type: 'stream_event', session_id: 's9', event: { type: 'message_start' } }
+    yield { type: 'stream_event', session_id: 's9', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '潮' } } }
+    yield { type: 'stream_event', session_id: 's9', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '汐' } } }
+    yield { type: 'stream_event', session_id: 's9', event: { type: 'message_stop' } }
+    yield { type: 'assistant', session_id: 's9', message: { model: 'claude-opus-4-8', content: [{ type: 'text', text: '潮汐' }] } }
+    yield { type: 'result', subtype: 'success' }
+  }
+  const agent = new ClaudeCodeAgent({ query: q })
+  const out: string[] = []
+  for await (const c of agent.ask('什么是潮汐', { turnId: 'g:1' })) out.push(c)
+  expect(out).toEqual(['潮', '汐'])                    // 只逐 token,不把完整 '潮汐' 再吐一遍
+  expect(opts.includePartialMessages).toBe(true)       // 流式开关已开
+  expect(agent.currentModel()).toBe('claude-opus-4-8') // model 仍从 assistant 捕获
+})
+
+test('无 stream_event 时回退:仍逐 text block yield(兼容非流式 SDK/测试)', async () => {
+  const q: SdkQuery = async function* () {
+    yield { type: 'assistant', session_id: 's', message: { content: [{ type: 'text', text: 'A' }, { type: 'text', text: 'B' }] } }
+  }
+  const out: string[] = []
+  for await (const c of new ClaudeCodeAgent({ query: q }).ask('hi', { turnId: 'g:1' })) out.push(c)
+  expect(out).toEqual(['A', 'B']) // 没 partial → 用 block 文本兜底
+})
+
 test('已吐字后报错不重试(避免重复输出半截答案)', async () => {
   const calls: (string | undefined)[] = []
   let round = 0
