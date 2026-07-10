@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,9 +74,12 @@ class RodeClient(
     private val tts = TtsSpeaker() // 仅保留耳标提示音；回答播放走下方 MediaPlayer。
     private var mediaPlayer: MediaPlayer? = null
     private var mediaPlaybackActive = false
-    // 分句流式播放队列：tts_seg 按到达顺序入队，播完一段自动接下一段；tts_end 后队列播空回 IDLE。
-    private val ttsQueue = ArrayDeque<String>()
+    // 分句流式播放队列：tts_seg 到达即后台预取到本地文件（下载与播放并行），
+    // 播放器只碰本地文件——段间隙从"每段一次 TLS+下载"降到毫秒级。
+    private val ttsQueue = ArrayDeque<kotlinx.coroutines.Deferred<java.io.File?>>()
     private var ttsStreamEnded = false
+    private var ttsAdvancing = false // 单消费者守卫：防 enqueue 与 onCompletion 双触发 playNext
+    private var currentSegFile: java.io.File? = null // 正在播的本地段文件，播完/打断即删
 
     @Volatile private var state: RodeState = RodeState.IDLE
     private var turnJob: Job? = null
@@ -287,38 +291,61 @@ class RodeClient(
         try { if (wifiLock.isHeld) wifiLock.release() } catch (_: Throwable) {}
     }
 
-    /** 新一轮开始/打断时清空播放管线。 */
+    /** 新一轮开始/打断时清空播放管线：取消在飞预取 + 删残留文件。 */
     private fun resetTtsQueue() {
-        ttsQueue.clear()
+        while (true) {
+            val d = ttsQueue.removeFirstOrNull() ?: break
+            if (d.isCompleted) runCatching { d.getCompleted()?.delete() } else d.cancel()
+        }
+        currentSegFile?.delete(); currentSegFile = null
         ttsStreamEnded = false
     }
 
-    /** 分段入队：空闲则立即起播，正在播则排队等 onCompletion 接力。 */
+    /** 分段入队：立即后台预取；播放空闲则启动消费。 */
     private fun enqueueTtsSegment(url: String) {
         if (url.isBlank()) return
-        ttsQueue.addLast(url)
-        if (!mediaPlaybackActive) playNextSegment()
+        val deferred = scope.async(Dispatchers.IO) { prefetchSegment(url) }
+        ttsQueue.addLast(deferred)
+        if (!mediaPlaybackActive && !ttsAdvancing) playNextSegment()
+    }
+
+    /** 下载一段音频到 cache 本地文件；失败返回 null（该段跳过）。 */
+    private fun prefetchSegment(url: String): java.io.File? {
+        val resolved = try { chatUrl.toHttpUrl().resolve(url)?.toString() } catch (_: Throwable) { null } ?: return null
+        return try {
+            val reqB = Request.Builder().url(resolved)
+            if (token.isNotEmpty()) reqB.header("Authorization", "Bearer $token")
+            http.newCall(reqB.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val f = java.io.File.createTempFile("tts-seg-", ".mp3", context.cacheDir)
+                f.outputStream().use { out -> resp.body?.byteStream()?.copyTo(out) }
+                if (f.length() > 0) f else { f.delete(); null }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "TTS segment prefetch failed", t)
+            null
+        }
     }
 
     private fun playNextSegment() {
-        val url = ttsQueue.removeFirstOrNull() ?: run {
+        val deferred = ttsQueue.removeFirstOrNull() ?: run {
             // 队列空：全部段已宣告结束才收尾，否则保持 SPEAKING 等下一段到达
             if (ttsStreamEnded && state == RodeState.SPEAKING) setState(RodeState.IDLE)
             return
         }
-        playTts(url)
+        ttsAdvancing = true
+        scope.launch(Dispatchers.Main) {
+            val file = try { deferred.await() } catch (_: Throwable) { null }
+            ttsAdvancing = false
+            if (file == null) { playNextSegment(); return@launch } // 坏段跳过，别卡住队列
+            playLocalSegment(file)
+        }
     }
 
-    /** 解析后端同源 URL，携带聊天使用的同一 token 异步播放。 */
-    private fun playTts(url: String) {
-        if (url.isBlank()) return
-        val resolved = try { chatUrl.toHttpUrl().resolve(url)?.toString() } catch (_: Throwable) { null }
-        if (resolved == null) {
-            Log.w(TAG, "invalid TTS url")
-            playNextSegment() // 坏段跳过，别卡住队列
-            return
-        }
+    /** 播本地文件段：prepare 仅毫秒级，段间近无缝。 */
+    private fun playLocalSegment(file: java.io.File) {
         stopCurrentPlayer() // 只停当前段，不清队列（清队列属于 barge-in/新轮）
+        currentSegFile?.delete(); currentSegFile = file
         val player = MediaPlayer()
         mediaPlayer = player
         mediaPlaybackActive = true // prepare 阶段也属于 SPEAKING，单击可立即打断。
@@ -330,8 +357,7 @@ class RodeClient(
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
-            val headers = if (token.isEmpty()) emptyMap() else mapOf("Authorization" to "Bearer $token")
-            player.setDataSource(context, Uri.parse(resolved), headers)
+            player.setDataSource(file.path)
             player.setOnPreparedListener { ready ->
                 if (mediaPlayer === ready && mediaPlaybackActive) ready.start()
             }
