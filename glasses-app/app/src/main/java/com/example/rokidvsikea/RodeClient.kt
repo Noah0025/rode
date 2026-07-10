@@ -80,6 +80,8 @@ class RodeClient(
     private var ttsStreamEnded = false
     private var ttsAdvancing = false // 单消费者守卫：防 enqueue 与 onCompletion 双触发 playNext
     private var currentSegFile: java.io.File? = null // 正在播的本地段文件，播完/打断即删
+    // 双缓冲：当前段在播时提前 prepare 好下一段，onCompletion 瞬间接棒（段间隙→毫秒级）
+    private var preparedNext: Pair<MediaPlayer, java.io.File>? = null
 
     @Volatile private var state: RodeState = RodeState.IDLE
     private var turnJob: Job? = null
@@ -298,6 +300,8 @@ class RodeClient(
             if (d.isCompleted) runCatching { d.getCompleted()?.delete() } else d.cancel()
         }
         currentSegFile?.delete(); currentSegFile = null
+        preparedNext?.let { (pl, f) -> runCatching { pl.release() }; f.delete() }
+        preparedNext = null
         ttsStreamEnded = false
     }
 
@@ -307,6 +311,41 @@ class RodeClient(
         val deferred = scope.async(Dispatchers.IO) { prefetchSegment(url) }
         ttsQueue.addLast(deferred)
         if (!mediaPlaybackActive && !ttsAdvancing) playNextSegment()
+        // 下载一完成就尝试把它 prepare 成待命播放器（若当前正在播且还没有待命者）
+        deferred.invokeOnCompletion {
+            scope.launch(Dispatchers.Main) { maybePrepareNext() }
+        }
+    }
+
+    /** 队首段已下载完且当前在播、无待命者 → 提前建好下一段播放器待命。 */
+    private fun maybePrepareNext() {
+        if (!mediaPlaybackActive || preparedNext != null) return
+        val head = ttsQueue.firstOrNull() ?: return
+        if (!head.isCompleted) return
+        val file = runCatching { head.getCompleted() }.getOrNull()
+        ttsQueue.removeFirstOrNull() // 消费队首
+        if (file == null) { maybePrepareNext(); return } // 坏段跳过，试下一个
+        val player = MediaPlayer()
+        try {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.setDataSource(file.path)
+            player.setOnPreparedListener { /* 待命，不自动播 */ }
+            player.setOnErrorListener { failed, _, _ ->
+                if (preparedNext?.first === failed) { preparedNext = null; file.delete() }
+                runCatching { failed.release() }
+                true
+            }
+            player.prepareAsync()
+            preparedNext = player to file
+        } catch (t: Throwable) {
+            Log.w(TAG, "prepareNext failed", t)
+            runCatching { player.release() }; file.delete()
+        }
     }
 
     /** 下载一段音频到 cache 本地文件；失败返回 null（该段跳过）。 */
@@ -359,7 +398,7 @@ class RodeClient(
             )
             player.setDataSource(file.path)
             player.setOnPreparedListener { ready ->
-                if (mediaPlayer === ready && mediaPlaybackActive) ready.start()
+                if (mediaPlayer === ready && mediaPlaybackActive) { ready.start(); maybePrepareNext() }
             }
             player.setOnCompletionListener { finishAudioPlayback(it) }
             player.setOnErrorListener { failed, what, extra ->
@@ -382,7 +421,19 @@ class RodeClient(
         mediaPlayer = null
         mediaPlaybackActive = false
         try { player.release() } catch (_: Throwable) {}
-        playNextSegment() // 接力下一段；队列空则由它决定是否回 IDLE
+        currentSegFile?.delete(); currentSegFile = null
+        val next = preparedNext
+        if (next != null) { // 双缓冲接棒：已 prepare 完，start 即响
+            preparedNext = null
+            mediaPlayer = next.first
+            currentSegFile = next.second
+            mediaPlaybackActive = true
+            next.first.setOnCompletionListener { finishAudioPlayback(it) }
+            try { next.first.start() } catch (t: Throwable) { finishAudioPlayback(next.first); return }
+            maybePrepareNext() // 立刻预备再下一段
+            return
+        }
+        playNextSegment() // 无待命者：走 await 下载路径；队列空则由它决定是否回 IDLE
     }
 
     /** 只停当前段播放器，不动队列（段间切换用）。 */
