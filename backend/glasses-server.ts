@@ -5,6 +5,7 @@
 import type { SttEngine } from './stt'
 import { normalizeCjkPunct } from './stt'
 import type { TtsEngine, TtsResult } from './tts'
+import { SentenceFeeder, SentenceSynthPipeline } from './tts-stream'
 import type { Agent } from './agent/types'
 import type { GlassesEvent, GlassesMeta } from './protocol'
 import { glassesEvent, encodeEvent, genTurnId } from './protocol'
@@ -41,7 +42,7 @@ export function createGlassesServer(opts: GlassesServerOpts) {
   const putAudio = (turnId: string, result: TtsResult) => {
     audioLru.delete(turnId)
     audioLru.set(turnId, result)
-    while (audioLru.size > 5) {
+    while (audioLru.size > 30) { // 分段后一轮多段：30 段 ≈ 最近数轮
       const oldest = audioLru.keys().next().value as string | undefined
       if (oldest === undefined) break
       audioLru.delete(oldest)
@@ -120,27 +121,44 @@ export function createGlassesServer(opts: GlassesServerOpts) {
         }, opts.ttlMs)
 
         let raw = '' // 原始(未归一)累积,终态统一归一,避免标点跨块边界漏转
+        // 分句流式 TTS：token 流里凑齐一句即合成一段，按序推 tts_seg，治长回答语音滞后。
+        const ttsOn = !!opts.tts && opts.tts.name !== 'off'
+        const feeder = new SentenceFeeder()
+        let segCount = 0
+        const pipeline = ttsOn
+          ? new SentenceSynthPipeline(
+              opts.tts!,
+              (seq, result) => {
+                putAudio(`${turnId}-${seq}`, result)
+                segCount++
+                enq({ type: 'tts_seg', turnId, seq, url: `/tts/${turnId}-${seq}.mp3` })
+              },
+              {
+                concurrency: 2,
+                // TTS 是增强能力：单句失败只降级成文字，不改变本轮成功语义。
+                onError: (seq, err) => process.stderr.write(redact(`glasses: TTS seg ${seq} failed: ` + err) + '\n'),
+              },
+            )
+          : undefined
         try {
           for await (const chunk of opts.agent.ask(text, { turnId, imagePath })) {
             answered = true
             sendMeta() // 首轮：开头 model 还 undefined,大脑一出声 model 就有了,这里补发,状态栏不再空
             raw += chunk
-            enq({ type: 'answer_delta', text: normalizeCjkPunct(chunk) }) // 逐块流式;中文标点统一全角
+            const norm = normalizeCjkPunct(chunk)
+            enq({ type: 'answer_delta', text: norm }) // 逐块流式;中文标点统一全角
+            if (pipeline) for (const sentence of feeder.push(norm)) pipeline.submit(sentence)
           }
-          // 终态完整答案：眼镜端据此定稿落盘 + TTS（v1 单条 answer 语义保留）
+          // 终态完整答案：眼镜端据此定稿落盘（v1 单条 answer 语义保留）
           const full = normalizeCjkPunct(raw).trim()
           if (full) {
             enq({ type: 'answer', text: full })
-            if (opts.tts && opts.tts.name !== 'off') {
-              try {
-                const result = await opts.tts.synthesize(full)
-                if (result.audio.byteLength === 0) throw new Error('TTS 输出为空')
-                putAudio(turnId, result)
-                enq({ type: 'tts', url: `/tts/${turnId}.mp3` })
-              } catch (err) {
-                // TTS 是增强能力：失败只降级成文字，不改变本轮成功语义。
-                process.stderr.write(redact('glasses: TTS failed: ' + err) + '\n')
-              }
+            if (pipeline) {
+              const rest = feeder.flush()
+              if (rest) pipeline.submit(rest)
+              // 等尾句合成完再收流（有界：15s 兜底，防合成挂死拖住 done）
+              await Promise.race([pipeline.drain(), new Promise((r) => setTimeout(r, 15_000))])
+              enq({ type: 'tts_end', turnId, total: segCount })
             }
           }
         } catch (err) {

@@ -78,7 +78,7 @@ async function chat(srv: ReturnType<typeof createGlassesServer>): Promise<string
   return res.text()
 }
 
-test('TTS 成功: answer 后发 tts，最后 done', async () => {
+test('TTS 成功: answer 后发 tts_seg 与 tts_end，最后 done', async () => {
   const tts = {
     name: 'edge' as const,
     synthesize: async (text: string) => ({ audio: new TextEncoder().encode(text), mime: 'audio/mpeg' }),
@@ -86,11 +86,27 @@ test('TTS 成功: answer 后发 tts，最后 done', async () => {
   const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
   const txt = await chat(srv)
   const answerAt = txt.indexOf('"type":"answer"')
-  const ttsAt = txt.indexOf('"type":"tts"')
+  const segAt = txt.indexOf('"type":"tts_seg"')
+  const endAt = txt.indexOf('"type":"tts_end"')
   const doneAt = txt.indexOf('"type":"done"')
   expect(answerAt).toBeGreaterThanOrEqual(0)
-  expect(answerAt).toBeLessThan(ttsAt)
-  expect(ttsAt).toBeLessThan(doneAt)
+  expect(answerAt).toBeLessThan(segAt)
+  expect(segAt).toBeLessThan(endAt)
+  expect(endAt).toBeLessThan(doneAt)
+  expect(JSON.parse(txt.split('\n').find(l => l.includes('"type":"tts_end"'))!.slice(6)).total).toBe(1)
+})
+
+test('多句答案分段推送且 seq 升序', async () => {
+  const tts = {
+    name: 'edge' as const,
+    synthesize: async (text: string) => ({ audio: new TextEncoder().encode(text), mime: 'audio/mpeg' }),
+  }
+  const multiAgent = { async *ask() { yield '第一句话说完了。'; yield '第二句话也说完了。收尾' } }
+  const srv = createGlassesServer({ stt: fakeStt, agent: multiAgent, tts, token: 't', ttlMs: 5000 })
+  const txt = await chat(srv)
+  const seqs = txt.split('\n').filter(l => l.includes('"type":"tts_seg"')).map(l => JSON.parse(l.slice(6)).seq)
+  expect(seqs).toEqual([0, 1, 2])
+  expect(JSON.parse(txt.split('\n').find(l => l.includes('"type":"tts_end"'))!.slice(6)).total).toBe(3)
 })
 
 test('TTS 失败只跳过 tts 事件，文字与 done 正常', async () => {
@@ -117,7 +133,7 @@ test('GET /tts/:id 复用 Bearer 鉴权并回吐 mp3', async () => {
   }
   const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
   const txt = await chat(srv)
-  const url = JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url
+  const url = JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts_seg"'))!.slice(6)).url
 
   const denied = await srv.handleChat(new Request('http://x' + url))
   expect(denied.status).toBe(401)
@@ -127,7 +143,7 @@ test('GET /tts/:id 复用 Bearer 鉴权并回吐 mp3', async () => {
   expect([...new Uint8Array(await ok.arrayBuffer())]).toEqual([1, 2, 3])
 })
 
-test('TTS 音频 LRU 只保留最近 5 轮', async () => {
+test('TTS 音频 LRU 只保留最近 30 段', async () => {
   let n = 0
   const tts = {
     name: 'edge' as const,
@@ -135,18 +151,18 @@ test('TTS 音频 LRU 只保留最近 5 轮', async () => {
   }
   const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
   const urls: string[] = []
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 30; i++) {
     const txt = await chat(srv)
-    urls.push(JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url)
+    urls.push(JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts_seg"'))!.slice(6)).url)
   }
   const auth = { authorization: 'Bearer t' }
   // 读取第 1 轮把它提升为最近使用，再加入第 6 轮；应淘汰原本第 2 轮而非第 1 轮。
   expect((await srv.handleChat(new Request('http://x' + urls[0], { headers: auth }))).status).toBe(200)
-  const sixth = await chat(srv)
-  urls.push(JSON.parse(sixth.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url)
+  const next = await chat(srv)
+  urls.push(JSON.parse(next.split('\n').find(line => line.includes('"type":"tts_seg"'))!.slice(6)).url)
   expect((await srv.handleChat(new Request('http://x' + urls[1], { headers: auth }))).status).toBe(404)
   expect((await srv.handleChat(new Request('http://x' + urls[0], { headers: auth }))).status).toBe(200)
-  const latest = await srv.handleChat(new Request('http://x' + urls[5], { headers: auth }))
+  const latest = await srv.handleChat(new Request('http://x' + urls[30], { headers: auth }))
   expect(latest.status).toBe(200)
-  expect([...new Uint8Array(await latest.arrayBuffer())]).toEqual([6])
+  expect([...new Uint8Array(await latest.arrayBuffer())]).toEqual([31]) // 第31次合成的字节标记
 })

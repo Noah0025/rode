@@ -73,6 +73,9 @@ class RodeClient(
     private val tts = TtsSpeaker() // 仅保留耳标提示音；回答播放走下方 MediaPlayer。
     private var mediaPlayer: MediaPlayer? = null
     private var mediaPlaybackActive = false
+    // 分句流式播放队列：tts_seg 按到达顺序入队，播完一段自动接下一段；tts_end 后队列播空回 IDLE。
+    private val ttsQueue = ArrayDeque<String>()
+    private var ttsStreamEnded = false
 
     @Volatile private var state: RodeState = RodeState.IDLE
     private var turnJob: Job? = null
@@ -160,6 +163,7 @@ class RodeClient(
             return
         }
         setState(RodeState.THINKING)
+        resetTtsQueue() // 新一轮：清上一轮残留的段队列与结束标记
         tts.earcon()
         armTimeout()
         turnJob = scope.launch {
@@ -243,9 +247,18 @@ class RodeClient(
                             // 再由 onAnswerRendered() 回 IDLE——否则字还在蹦、呼吸就没了。
                         }
                     }
-                    "tts" -> if (ttsEnabled) {
+                    "tts" -> if (ttsEnabled) { // 兼容旧后端的整段事件：等价单段入队
                         val url = ev.url.orEmpty()
-                        withContext(Dispatchers.Main) { playTts(url) }
+                        withContext(Dispatchers.Main) { enqueueTtsSegment(url); ttsStreamEnded = true }
+                    }
+                    "tts_seg" -> if (ttsEnabled) {
+                        val url = ev.url.orEmpty()
+                        withContext(Dispatchers.Main) { enqueueTtsSegment(url) }
+                    }
+                    "tts_end" -> if (ttsEnabled) withContext(Dispatchers.Main) {
+                        ttsStreamEnded = true
+                        // 全部段已到且队列播空（或没有任何段）→ 收尾回 IDLE
+                        if (!mediaPlaybackActive && ttsQueue.isEmpty() && state == RodeState.SPEAKING) setState(RodeState.IDLE)
                     }
                     "error" -> withContext(Dispatchers.Main) {
                         listener.onError(ev.text ?: context.getString(R.string.err_generic))
@@ -274,15 +287,38 @@ class RodeClient(
         try { if (wifiLock.isHeld) wifiLock.release() } catch (_: Throwable) {}
     }
 
+    /** 新一轮开始/打断时清空播放管线。 */
+    private fun resetTtsQueue() {
+        ttsQueue.clear()
+        ttsStreamEnded = false
+    }
+
+    /** 分段入队：空闲则立即起播，正在播则排队等 onCompletion 接力。 */
+    private fun enqueueTtsSegment(url: String) {
+        if (url.isBlank()) return
+        ttsQueue.addLast(url)
+        if (!mediaPlaybackActive) playNextSegment()
+    }
+
+    private fun playNextSegment() {
+        val url = ttsQueue.removeFirstOrNull() ?: run {
+            // 队列空：全部段已宣告结束才收尾，否则保持 SPEAKING 等下一段到达
+            if (ttsStreamEnded && state == RodeState.SPEAKING) setState(RodeState.IDLE)
+            return
+        }
+        playTts(url)
+    }
+
     /** 解析后端同源 URL，携带聊天使用的同一 token 异步播放。 */
     private fun playTts(url: String) {
         if (url.isBlank()) return
         val resolved = try { chatUrl.toHttpUrl().resolve(url)?.toString() } catch (_: Throwable) { null }
         if (resolved == null) {
             Log.w(TAG, "invalid TTS url")
+            playNextSegment() // 坏段跳过，别卡住队列
             return
         }
-        stopAudioPlayback()
+        stopCurrentPlayer() // 只停当前段，不清队列（清队列属于 barge-in/新轮）
         val player = MediaPlayer()
         mediaPlayer = player
         mediaPlaybackActive = true // prepare 阶段也属于 SPEAKING，单击可立即打断。
@@ -320,10 +356,11 @@ class RodeClient(
         mediaPlayer = null
         mediaPlaybackActive = false
         try { player.release() } catch (_: Throwable) {}
-        if (state == RodeState.SPEAKING) setState(RodeState.IDLE)
+        playNextSegment() // 接力下一段；队列空则由它决定是否回 IDLE
     }
 
-    private fun stopAudioPlayback() {
+    /** 只停当前段播放器，不动队列（段间切换用）。 */
+    private fun stopCurrentPlayer() {
         val player = mediaPlayer ?: run { mediaPlaybackActive = false; return }
         mediaPlayer = null
         mediaPlaybackActive = false
@@ -336,6 +373,12 @@ class RodeClient(
         } finally {
             try { player.release() } catch (_: Throwable) {}
         }
+    }
+
+    /** 整体停止（barge-in/新轮/释放）：停当前段 + 清队列。 */
+    private fun stopAudioPlayback() {
+        resetTtsQueue()
+        stopCurrentPlayer()
     }
 
     fun release() {
