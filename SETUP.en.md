@@ -32,6 +32,19 @@ whisper-server -m models/ggml-medium.bin -l zh --host 127.0.0.1 --port 18791 &
 ```
 **Verify**: `curl -s -F file=@<some 16k.wav> -F response_format=json http://127.0.0.1:18791/inference` returns `{"text":...}`.
 
+### 1.5. Install TTS (optional, off by default)
+YodaOS has no system TextToSpeech service, so the backend machine synthesizes an MP3 and streams it back to the glasses. On the Mac mini:
+```sh
+pip3 install edge-tts
+edge-tts --text "speech test" --voice zh-CN-XiaoxiaoNeural --write-media /tmp/rode-tts-test.mp3
+```
+After verifying the MP3, enable it explicitly in `.env`:
+```sh
+RODE_TTS_ENGINE=edge
+RODE_TTS_VOICE=zh-CN-XiaoxiaoNeural  # any edge-tts voice may be used
+```
+Leaving `RODE_TTS_ENGINE=off` needs no glasses-side change and keeps text-only answers. If the managed process cannot find the CLI on PATH, set `RODE_EDGE_TTS_BIN` to its absolute path.
+
 ### 2. Generate a token + write .env
 ```sh
 cp .env.example .env
@@ -73,7 +86,7 @@ TOKEN=$(grep '^RODE_GLASSES_TOKEN=' .env | cut -d= -f2)
 PUBLIC_URL="https://<node>.ts.net/glasses/chat"   # from step 4; for local testing use http://localhost:18790/glasses/chat
 curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav "$PUBLIC_URL"
 ```
-You should see four kinds of SSE events: `user → status → answer → done`. (No wav on hand? `say -o /tmp/a.aiff "what's the weather today" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`)
+You should see `user → status → answer → (tts) → done`; `tts` appears only when backend synthesis is enabled. (No wav on hand? `say -o /tmp/a.aiff "what's the weather today" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`)
 
 ## Swapping the brain (connecting a non-Claude agent)
 Implement `Agent.ask(text, ctx): AsyncIterable<string>` from `backend/agent/types.ts`, and in `backend/index.ts` replace the default `ClaudeCodeAgent` with your implementation. The protocol (`PROTOCOL.en.md`) stays the same.

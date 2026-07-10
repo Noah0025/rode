@@ -36,7 +36,8 @@ data: <JSON>\n\n
 | `user` | `text` | STT 转写出的用户原话 | 回显"用户说的" |
 | `status` | `text` | 处理中状态（如 `"思考中"`）| HUD 显状态 |
 | `answer_delta` | `text` | 回答的流式增量块（逐块下发）| 追加到当前回答行 |
-| `answer` | `text` | 本轮完整回答（终态）| 定稿当前行 + 朗读（若有 TTS）|
+| `answer` | `text` | 本轮完整回答（终态）| 定稿当前行 |
+| `tts` | `url` | 可选，后端合成的本轮 MP3 相对 URL | 携带同一 token 拉取并播放 |
 | `done` | — | 本轮结束 | 连接关闭，回 IDLE |
 | `error` | `text` | 出错提示 | 显示错误，回 IDLE |
 | `meta` | `model`, `usage5h`, `usage7d` | 可选状态栏元信息 | 状态栏显示 |
@@ -44,8 +45,8 @@ data: <JSON>\n\n
 ### 时序约定
 1. 连接建立后，后端**先发** `user`（回显转写）+ `status`（"思考中"）
 2. 处理期间连接**保持打开**（眼镜 HUD 一直显"思考中"）
-3. 大脑出结果 → 流式逐块发 `answer_delta`（0 或多个）→ 发一条完整 `answer`（终态，落盘/朗读用）→ 紧接 `done` → **关闭连接**
-4. **一轮一答**：一次请求对应若干 `answer_delta` + 一条终态 `answer` + `done`，然后连接关闭。下一句话是新的一次 POST。兼容性：旧客户端可忽略 `answer_delta`，仅用终态 `answer`。
+3. 大脑出结果 → 流式逐块发 `answer_delta`（0 或多个）→ 发一条完整 `answer`（终态，落盘用）→ 若开启后端 TTS，再发 `tts` → `done` → **关闭连接**
+4. **一轮一答**：一次请求对应若干 `answer_delta` + 一条终态 `answer` + 可选 `tts` + `done`，然后连接关闭。下一句话是新的一次 POST。兼容性：旧客户端可忽略不认识的事件。
 5. 出错（STT 失败/大脑超时）→ 发 `error` + `done`（HTTP 仍 200，错误在事件里）
 
 ### 事件 JSON 示例
@@ -58,9 +59,15 @@ data: {"type":"meta","model":"Sonnet 4.6","usage5h":"29%","usage7d":"3%"}
 
 data: {"type":"answer","text":"柏林今天阴天，最高22度，出门带件外套。"}
 
+data: {"type":"tts","url":"/tts/g:550e8400-e29b-41d4-a716-446655440000.mp3"}
+
 data: {"type":"done"}
 
 ```
+
+## 音频：GET /tts/:turnId.mp3
+
+`tts.url` 是后端同源相对 URL。眼镜必须像聊天请求一样发送 `Authorization: Bearer <token>`；token 不匹配返回 `401`，音频已被内存 LRU 淘汰则返回 `404`。参考后端只保留最近使用的 5 轮音频。
 
 ## 最小自测（curl）
 ```bash

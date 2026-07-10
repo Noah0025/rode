@@ -34,7 +34,9 @@ The `type` field of `<JSON>` determines the event type:
 |------|------|------|----------|
 | `user` | `text` | The user's original words as transcribed by STT | Echo "what the user said" |
 | `status` | `text` | Processing status (e.g. `"Thinking"`) | HUD shows status |
-| `answer` | `text` | The brain's answer | Display + read aloud (if TTS available) |
+| `answer_delta` | `text` | A streamed answer chunk | Append to the current answer line |
+| `answer` | `text` | The complete final answer | Finalize the current answer line |
+| `tts` | `url` | Optional backend-synthesized MP3 URL | Fetch with the same token and play |
 | `done` | — | This turn is over | Connection closes, return to IDLE |
 | `error` | `text` | Error message | Display the error, return to IDLE |
 | `meta` | `model`, `usage5h`, `usage7d` | Optional status-bar meta info | Show in status bar |
@@ -42,8 +44,8 @@ The `type` field of `<JSON>` determines the event type:
 ### Timing convention
 1. After the connection is established, the backend **first sends** `user` (echo the transcription) + `status` ("Thinking")
 2. During processing the connection **stays open** (the glasses HUD keeps showing "Thinking")
-3. The brain produces a result → send `answer` → immediately followed by `done` → **close the connection**
-4. **One turn, one answer**: a single request corresponds to one `answer` + `done`, then the connection closes. The next utterance is a new POST.
+3. The brain produces a result → send zero or more `answer_delta` events → `answer` → optional `tts` → `done` → **close the connection**
+4. **One turn, one answer**: a single request corresponds to one final `answer`, an optional `tts`, and `done`. Older clients may ignore unknown events.
 5. On error (STT failure / brain timeout) → send `error` + `done` (HTTP is still 200, the error is in the event)
 
 ### Event JSON example
@@ -56,9 +58,15 @@ data: {"type":"meta","model":"Sonnet 4.6","usage5h":"29%","usage7d":"3%"}
 
 data: {"type":"answer","text":"Cloudy in Berlin today, high 22°C — bring a jacket."}
 
+data: {"type":"tts","url":"/tts/g:550e8400-e29b-41d4-a716-446655440000.mp3"}
+
 data: {"type":"done"}
 
 ```
+
+## Audio: GET /tts/:turnId.mp3
+
+`tts.url` is a same-origin relative URL. The glasses send the same `Authorization: Bearer <token>` header used for chat; a mismatched token returns `401`, and audio already evicted from the in-memory LRU returns `404`. The reference backend keeps the five most recently used turns.
 
 ## Minimal self-test (curl)
 ```bash

@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test'
 import { createGlassesServer } from './glasses-server'
+import { NoopTts } from './tts'
 
 const fakeStt = { name: 'whispercpp' as const, transcribe: async () => '你好' }
 const fakeAgent = { async *ask() { yield '你也好' } }
@@ -66,4 +67,86 @@ test('空转写不进大脑,回 error', async () => {
   }))
   const txt = await res.text()
   expect(txt).toContain('没说话')
+})
+
+async function chat(srv: ReturnType<typeof createGlassesServer>): Promise<string> {
+  const fd = new FormData()
+  fd.append('audio', new Blob([new Uint8Array([1])], { type: 'audio/wav' }), 'a.wav')
+  const res = await srv.handleChat(new Request('http://x/glasses/chat', {
+    method: 'POST', headers: { authorization: 'Bearer t' }, body: fd,
+  }))
+  return res.text()
+}
+
+test('TTS 成功: answer 后发 tts，最后 done', async () => {
+  const tts = {
+    name: 'edge' as const,
+    synthesize: async (text: string) => ({ audio: new TextEncoder().encode(text), mime: 'audio/mpeg' }),
+  }
+  const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
+  const txt = await chat(srv)
+  const answerAt = txt.indexOf('"type":"answer"')
+  const ttsAt = txt.indexOf('"type":"tts"')
+  const doneAt = txt.indexOf('"type":"done"')
+  expect(answerAt).toBeGreaterThanOrEqual(0)
+  expect(answerAt).toBeLessThan(ttsAt)
+  expect(ttsAt).toBeLessThan(doneAt)
+})
+
+test('TTS 失败只跳过 tts 事件，文字与 done 正常', async () => {
+  const tts = {
+    name: 'edge' as const,
+    synthesize: async () => { throw new Error('mock synth failed') },
+  }
+  const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
+  const txt = await chat(srv)
+  expect(txt).toContain('"type":"answer"')
+  expect(txt).not.toContain('"type":"tts"')
+  expect(txt).toContain('"type":"done"')
+})
+
+test('TTS off 不调用合成且不发 tts 事件', async () => {
+  const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts: new NoopTts(), token: 't', ttlMs: 5000 })
+  expect(await chat(srv)).not.toContain('"type":"tts"')
+})
+
+test('GET /tts/:id 复用 Bearer 鉴权并回吐 mp3', async () => {
+  const tts = {
+    name: 'edge' as const,
+    synthesize: async () => ({ audio: new Uint8Array([1, 2, 3]), mime: 'audio/mpeg' }),
+  }
+  const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
+  const txt = await chat(srv)
+  const url = JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url
+
+  const denied = await srv.handleChat(new Request('http://x' + url))
+  expect(denied.status).toBe(401)
+  const ok = await srv.handleChat(new Request('http://x' + url, { headers: { authorization: 'Bearer t' } }))
+  expect(ok.status).toBe(200)
+  expect(ok.headers.get('content-type')).toBe('audio/mpeg')
+  expect([...new Uint8Array(await ok.arrayBuffer())]).toEqual([1, 2, 3])
+})
+
+test('TTS 音频 LRU 只保留最近 5 轮', async () => {
+  let n = 0
+  const tts = {
+    name: 'edge' as const,
+    synthesize: async () => ({ audio: new Uint8Array([++n]), mime: 'audio/mpeg' }),
+  }
+  const srv = createGlassesServer({ stt: fakeStt, agent: fakeAgent, tts, token: 't', ttlMs: 5000 })
+  const urls: string[] = []
+  for (let i = 0; i < 5; i++) {
+    const txt = await chat(srv)
+    urls.push(JSON.parse(txt.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url)
+  }
+  const auth = { authorization: 'Bearer t' }
+  // 读取第 1 轮把它提升为最近使用，再加入第 6 轮；应淘汰原本第 2 轮而非第 1 轮。
+  expect((await srv.handleChat(new Request('http://x' + urls[0], { headers: auth }))).status).toBe(200)
+  const sixth = await chat(srv)
+  urls.push(JSON.parse(sixth.split('\n').find(line => line.includes('"type":"tts"'))!.slice(6)).url)
+  expect((await srv.handleChat(new Request('http://x' + urls[1], { headers: auth }))).status).toBe(404)
+  expect((await srv.handleChat(new Request('http://x' + urls[0], { headers: auth }))).status).toBe(200)
+  const latest = await srv.handleChat(new Request('http://x' + urls[5], { headers: auth }))
+  expect(latest.status).toBe(200)
+  expect([...new Uint8Array(await latest.arrayBuffer())]).toEqual([6])
 })

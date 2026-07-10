@@ -1,6 +1,9 @@
 package com.example.rokidvsikea
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.PowerManager
 import android.util.Log
@@ -16,6 +19,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 
 enum class RodeState { IDLE, LISTENING, THINKING, SPEAKING }
@@ -37,6 +41,7 @@ class RodeClient(
     private val chatUrl: String,
     private val token: String,
     private val listener: Listener,
+    private val ttsEnabled: Boolean = true,
 ) {
     interface Listener {
         fun onState(state: RodeState)
@@ -65,16 +70,9 @@ class RodeClient(
         .build()
     private val recorder = WavRecorder()
 
-    private var ttsReady = false
-    private val tts = TtsSpeaker(
-        context,
-        onReady = { ok ->
-            ttsReady = ok
-            // 眼镜无中文 TTS 是已知默认（纯文字显示），不打扰用户，只记日志
-            if (!ok) Log.d(TAG, "Chinese TTS unavailable — text-only mode")
-        },
-        onSpeechDone = { if (state == RodeState.SPEAKING) setState(RodeState.IDLE) }, // rest, don't auto-listen
-    )
+    private val tts = TtsSpeaker() // 仅保留耳标提示音；回答播放走下方 MediaPlayer。
+    private var mediaPlayer: MediaPlayer? = null
+    private var mediaPlaybackActive = false
 
     @Volatile private var state: RodeState = RodeState.IDLE
     private var turnJob: Job? = null
@@ -108,13 +106,15 @@ class RodeClient(
             RodeState.IDLE -> startListening()
             RodeState.LISTENING -> stopListeningAndSend()
             RodeState.THINKING -> { cancelTurn(); setState(RodeState.IDLE) }
-            RodeState.SPEAKING -> { tts.stop(); startListening() } // barge-in → speak again
+            RodeState.SPEAKING -> { stopAudioPlayback(); startListening() } // barge-in → stop MP3 and speak again
         }
     }
 
     /** UI 把答案逐字揭示完后调用：结束朗读态回 IDLE（无 TTS 的文字流式收尾，让呼吸持续到字显示完）。 */
     fun onAnswerRendered() {
-        if (state == RodeState.SPEAKING || state == RodeState.THINKING) setState(RodeState.IDLE)
+        if (!mediaPlaybackActive && (state == RodeState.SPEAKING || state == RodeState.THINKING)) {
+            setState(RodeState.IDLE)
+        }
     }
 
     /** 双击取消：说话中丢弃录音 / 思考中取消请求，回 IDLE（不发给后端）。供误触撤回。 */
@@ -135,11 +135,13 @@ class RodeClient(
         cancelTimeout()
         turnJob?.cancel()
         turnJob = null
+        stopAudioPlayback()
         releaseLocks()
         setState(RodeState.IDLE)
     }
 
     private fun startListening() {
+        stopAudioPlayback()
         turnJob?.cancel(); turnJob = null   // 取消上一轮残留的 SSE（多条流式后）
         cancelTimeout()
         acquireLocks()
@@ -237,10 +239,13 @@ class RodeClient(
                         val text = ev.text ?: ""
                         withContext(Dispatchers.Main) {
                             listener.onAssistantText(text) // 定稿+落盘(流式收尾;非流式则新建行)
-                            if (ttsReady) { setState(RodeState.SPEAKING); tts.speak(text) } // 整段一次性朗读
-                            // 无 TTS:不在此回 IDLE;保持 SPEAKING(呼吸),等 UI 打字机把字揭示完
+                            // 不在此朗读：等待后端紧随其后的 tts URL。无 TTS 时保持回答态，
                             // 再由 onAnswerRendered() 回 IDLE——否则字还在蹦、呼吸就没了。
                         }
+                    }
+                    "tts" -> if (ttsEnabled) {
+                        val url = ev.url.orEmpty()
+                        withContext(Dispatchers.Main) { playTts(url) }
                     }
                     "error" -> withContext(Dispatchers.Main) {
                         listener.onError(ev.text ?: context.getString(R.string.err_generic))
@@ -269,9 +274,74 @@ class RodeClient(
         try { if (wifiLock.isHeld) wifiLock.release() } catch (_: Throwable) {}
     }
 
+    /** 解析后端同源 URL，携带聊天使用的同一 token 异步播放。 */
+    private fun playTts(url: String) {
+        if (url.isBlank()) return
+        val resolved = try { chatUrl.toHttpUrl().resolve(url)?.toString() } catch (_: Throwable) { null }
+        if (resolved == null) {
+            Log.w(TAG, "invalid TTS url")
+            return
+        }
+        stopAudioPlayback()
+        val player = MediaPlayer()
+        mediaPlayer = player
+        mediaPlaybackActive = true // prepare 阶段也属于 SPEAKING，单击可立即打断。
+        setState(RodeState.SPEAKING)
+        try {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            val headers = if (token.isEmpty()) emptyMap() else mapOf("Authorization" to "Bearer $token")
+            player.setDataSource(context, Uri.parse(resolved), headers)
+            player.setOnPreparedListener { ready ->
+                if (mediaPlayer === ready && mediaPlaybackActive) ready.start()
+            }
+            player.setOnCompletionListener { finishAudioPlayback(it) }
+            player.setOnErrorListener { failed, what, extra ->
+                Log.w(TAG, "TTS playback failed: what=$what extra=$extra")
+                finishAudioPlayback(failed)
+                true
+            }
+            player.prepareAsync()
+        } catch (t: Throwable) {
+            Log.w(TAG, "TTS playback setup failed", t)
+            finishAudioPlayback(player)
+        }
+    }
+
+    private fun finishAudioPlayback(player: MediaPlayer) {
+        if (mediaPlayer !== player) {
+            try { player.release() } catch (_: Throwable) {}
+            return
+        }
+        mediaPlayer = null
+        mediaPlaybackActive = false
+        try { player.release() } catch (_: Throwable) {}
+        if (state == RodeState.SPEAKING) setState(RodeState.IDLE)
+    }
+
+    private fun stopAudioPlayback() {
+        val player = mediaPlayer ?: run { mediaPlaybackActive = false; return }
+        mediaPlayer = null
+        mediaPlaybackActive = false
+        try {
+            player.setOnPreparedListener(null)
+            player.setOnCompletionListener(null)
+            player.setOnErrorListener(null)
+            player.stop()
+        } catch (_: Throwable) {
+        } finally {
+            try { player.release() } catch (_: Throwable) {}
+        }
+    }
+
     fun release() {
         try { recorder.stop() } catch (_: Throwable) {}
         cancelTimeout()
+        stopAudioPlayback()
         tts.shutdown()
         releaseLocks()
         scope.cancel()

@@ -12,3 +12,7 @@ test('answer_delta 事件携带增量文本', () => {
   expect(glassesEvent({ type: 'answer_delta', text: '晴，' }))
     .toBe('data: {"type":"answer_delta","text":"晴，"}\n\n')
 })
+test('tts 事件携带带扩展名的相对 URL', () => {
+  expect(glassesEvent({ type: 'tts', url: '/tts/g:turn.mp3' }))
+    .toBe('data: {"type":"tts","url":"/tts/g:turn.mp3"}\n\n')
+})

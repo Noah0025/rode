@@ -4,6 +4,7 @@ export type GlassesEvent =
   | { type: 'status'; text: string }
   | { type: 'answer_delta'; text: string } // 流式增量块(逐块吐答案,眼镜端追加同一行)
   | { type: 'answer'; text: string }        // 终态完整答案(落盘/TTS;v1 兼容保留)
+  | { type: 'tts'; url: string }            // 后端合成好的整段 mp3（需同一 Bearer token 获取）
   | { type: 'done' }
   | { type: 'error'; text: string }
   | ({ type: 'meta' } & GlassesMeta)

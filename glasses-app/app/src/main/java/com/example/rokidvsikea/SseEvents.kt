@@ -2,10 +2,12 @@ package com.example.rokidvsikea
 
 import org.json.JSONObject
 
-/** One backend SSE event. Mirrors the glasses protocol: user/status/answer/done/error/meta. */
+/** One backend SSE event. Mirrors the glasses protocol: user/status/answer/tts/done/error/meta. */
 data class SseEvent(
     val type: String,
     val text: String?,
+    // type=tts 时是同源相对 URL，拉取时继续携带 Bearer token。
+    val url: String? = null,
     // type=meta 时携带（状态栏：模型 · 5h用量 · 7d用量）
     val model: String? = null,
     val usage5h: String? = null,
@@ -24,6 +26,7 @@ fun parseSseDataLine(line: String): SseEvent? {
         SseEvent(
             type = type,
             text = text,
+            url = if (json.has("url")) json.optString("url") else null,
             model = if (json.has("model")) json.optString("model") else null,
             usage5h = if (json.has("usage5h")) json.optString("usage5h") else null,
             usage7d = if (json.has("usage7d")) json.optString("usage7d") else null,

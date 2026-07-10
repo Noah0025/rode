@@ -4,6 +4,7 @@
 
 import type { SttEngine } from './stt'
 import { normalizeCjkPunct } from './stt'
+import type { TtsEngine, TtsResult } from './tts'
 import type { Agent } from './agent/types'
 import type { GlassesEvent, GlassesMeta } from './protocol'
 import { glassesEvent, encodeEvent, genTurnId } from './protocol'
@@ -11,6 +12,8 @@ import { redact } from './security'
 
 export type GlassesServerOpts = {
   stt: SttEngine
+  /** 可选 TTS；name=off 或未传时保持纯文字协议。 */
+  tts?: TtsEngine
   agent: Agent
   token: string
   ttlMs: number
@@ -33,11 +36,44 @@ function sseOnce(ev: GlassesEvent): Response {
 }
 
 export function createGlassesServer(opts: GlassesServerOpts) {
+  // 每个 server 实例独立持有音频；读取会提升热度，最多保留最近使用的 5 轮。
+  const audioLru = new Map<string, TtsResult>()
+  const putAudio = (turnId: string, result: TtsResult) => {
+    audioLru.delete(turnId)
+    audioLru.set(turnId, result)
+    while (audioLru.size > 5) {
+      const oldest = audioLru.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      audioLru.delete(oldest)
+    }
+  }
+  const getAudio = (turnId: string): TtsResult | undefined => {
+    const result = audioLru.get(turnId)
+    if (!result) return undefined
+    audioLru.delete(turnId)
+    audioLru.set(turnId, result)
+    return result
+  }
+
   async function handleChat(req: Request): Promise<Response> {
     const url = new URL(req.url)
-    if (req.method !== 'POST' || url.pathname !== '/glasses/chat') return new Response('not found', { status: 404 })
+    const isChat = req.method === 'POST' && url.pathname === '/glasses/chat'
+    const ttsMatch = req.method === 'GET' ? url.pathname.match(/^\/tts\/([^/]+)\.mp3$/) : null
+    if (!isChat && !ttsMatch) return new Response('not found', { status: 404 })
     if (opts.token && req.headers.get('authorization') !== `Bearer ${opts.token}`) {
       return new Response('unauthorized', { status: 401 })
+    }
+    if (ttsMatch) {
+      const result = getAudio(ttsMatch[1])
+      if (!result) return new Response('not found', { status: 404 })
+      return new Response(result.audio, {
+        status: 200,
+        headers: {
+          'Content-Type': result.mime,
+          'Content-Length': String(result.audio.byteLength),
+          'Cache-Control': 'private, no-store',
+        },
+      })
     }
     if (opts.bodyLimit && Number(req.headers.get('content-length') ?? '0') > opts.bodyLimit) {
       return new Response('payload too large', { status: 413 })
@@ -93,7 +129,20 @@ export function createGlassesServer(opts: GlassesServerOpts) {
           }
           // 终态完整答案：眼镜端据此定稿落盘 + TTS（v1 单条 answer 语义保留）
           const full = normalizeCjkPunct(raw).trim()
-          if (full) enq({ type: 'answer', text: full })
+          if (full) {
+            enq({ type: 'answer', text: full })
+            if (opts.tts && opts.tts.name !== 'off') {
+              try {
+                const result = await opts.tts.synthesize(full)
+                if (result.audio.byteLength === 0) throw new Error('TTS 输出为空')
+                putAudio(turnId, result)
+                enq({ type: 'tts', url: `/tts/${turnId}.mp3` })
+              } catch (err) {
+                // TTS 是增强能力：失败只降级成文字，不改变本轮成功语义。
+                process.stderr.write(redact('glasses: TTS failed: ' + err) + '\n')
+              }
+            }
+          }
         } catch (err) {
           process.stderr.write(redact('glasses: agent failed: ' + err) + '\n')
           if (!answered) enq({ type: 'error', text: '出错了' })
@@ -107,5 +156,5 @@ export function createGlassesServer(opts: GlassesServerOpts) {
     return new Response(stream, { status: 200, headers: SSE_HEADERS })
   }
 
-  return { handleChat }
+  return { handleChat, handleRequest: handleChat }
 }

@@ -31,4 +31,11 @@ class SseParseTest {
         assertEquals("done", ev?.type)
         assertEquals(null, ev?.text)
     }
+
+    @Test
+    fun parses_tts_url() {
+        val ev = parseSseDataLine("""data: {"type":"tts","url":"/tts/g:turn.mp3"}""")
+        assertEquals("tts", ev?.type)
+        assertEquals("/tts/g:turn.mp3", ev?.url)
+    }
 }

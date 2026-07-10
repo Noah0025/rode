@@ -29,7 +29,7 @@ glasses app (record) ──multipart audio POST──► your backend (public in
                                                  │ whisper.cpp STT
                                                  │ Agent.ask()  ← any AI brain (pluggable)
                                      ◄──SSE──────┘ user/status/answer/done/meta
-glasses HUD shows text (v1: no voice readout)
+glasses HUD shows text + optionally plays backend-synthesized audio
 ```
 
 - **Protocol contract** (the only interface between glasses ↔ backend): see [`PROTOCOL.en.md`](PROTOCOL.en.md)
@@ -52,7 +52,7 @@ glasses HUD shows text (v1: no voice readout)
 | Microphone (record speech) · Network · Wake lock (no sleep within a turn) · Read battery/WiFi signal/time (status bar) · URL+token injected via adb | `CHANGE_WIFI_STATE`: **Android 12 blocks non-system apps from enabling WiFi**, so it actually cannot be turned on (falls back to adb, see below) · `CAMERA`: declared, but **v1 has no vision** (records audio only; no photos sent; the protocol reserves an image field, glasses-side implementation pending) |
 
 **Current limitations (v1 cannot do)**
-- **No spoken readout**: the glasses lack a Chinese TTS voice pack → answers are shown as text on the HUD only, with no audio (readout = backend synthesizes audio and sends it back; on the roadmap)
+- **No on-device TTS**: YodaOS omits the TextToSpeech system service; the Mac mini can run `edge-tts` and stream synthesized MP3 audio back (off by default; see SETUP)
 - **No vision**: no photos taken / no images sent (camera permission exists but is not wired up)
 - **WiFi cannot stay on automatically**: it gets turned off by YodaOS on battery/sleep, and the app has no permission to enable it → relies on the adb fallback or use while charging (see "Known WiFi limitation" below)
 - **Not streaming**: one answer per turn (returned as a whole), not token-by-token streaming output (streaming is on the roadmap)

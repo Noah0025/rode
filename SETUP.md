@@ -32,6 +32,19 @@ whisper-server -m models/ggml-medium.bin -l zh --host 127.0.0.1 --port 18791 &
 ```
 **验证**：`curl -s -F file=@<某段16k.wav> -F response_format=json http://127.0.0.1:18791/inference` 返回 `{"text":...}`。
 
+### 1.5. 装 TTS（可选，默认关闭）
+YodaOS 没有系统 TextToSpeech 服务，语音回答由后端机器合成后以 MP3 流回眼镜。Mac mini 上安装外部 CLI：
+```sh
+pip3 install edge-tts
+edge-tts --text "语音测试" --voice zh-CN-XiaoxiaoNeural --write-media /tmp/rode-tts-test.mp3
+```
+确认 `/tmp/rode-tts-test.mp3` 可播放后，在 `.env` 中手动开启：
+```sh
+RODE_TTS_ENGINE=edge
+RODE_TTS_VOICE=zh-CN-XiaoxiaoNeural  # 可换其它 edge-tts 音色
+```
+不安装或保持 `RODE_TTS_ENGINE=off` 时只有文字回答，眼镜端无需改配置。若托管进程的 PATH 找不到 CLI，可把 `RODE_EDGE_TTS_BIN` 写成 `edge-tts` 的绝对路径。
+
 ### 2. 生成 token + 写 .env
 ```sh
 cp .env.example .env
@@ -73,7 +86,7 @@ TOKEN=$(grep '^RODE_GLASSES_TOKEN=' .env | cut -d= -f2)
 PUBLIC_URL="https://<node>.ts.net/glasses/chat"   # step 4 拿到的；本地自测可用 http://localhost:18790/glasses/chat
 curl -N -H "Authorization: Bearer $TOKEN" -F audio=@/tmp/t.wav "$PUBLIC_URL"
 ```
-应看到 `user → status → answer → done` 四类 SSE 事件。（没有现成 wav？`say -o /tmp/a.aiff "今天天气怎么样" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`）
+应看到 `user → status → answer → (tts) → done` SSE 事件；`tts` 仅在后端开启合成时出现。（没有现成 wav？`say -o /tmp/a.aiff "今天天气怎么样" && afconvert /tmp/a.aiff -f WAVE -d LEI16@16000 -c 1 /tmp/t.wav`）
 
 ## 换大脑（接非 Claude 的 agent）
 实现 `backend/agent/types.ts` 的 `Agent.ask(text, ctx): AsyncIterable<string>`，在 `backend/index.ts` 把默认的 `ClaudeCodeAgent` 换成你的实现即可。协议（`PROTOCOL.md`）不变。

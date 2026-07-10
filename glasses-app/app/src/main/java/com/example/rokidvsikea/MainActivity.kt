@@ -167,7 +167,9 @@ class MainActivity : AppCompatActivity(), RodeClient.Listener {
     }
 
     private fun startClient() {
-        if (client == null) client = RodeClient(applicationContext, chatUrl, RodeConfig.token(this), this)
+        if (client == null) client = RodeClient(
+            applicationContext, chatUrl, RodeConfig.token(this), this, RodeConfig.ttsEnabled(this)
+        )
         client?.start()
     }
 

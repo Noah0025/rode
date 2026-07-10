@@ -9,6 +9,7 @@ import { readFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { loadConfig } from './config'
 import { createStt } from './stt'
+import { createTts } from './tts'
 import { prettyModelId } from './usage'
 import { createGlassesServer } from './glasses-server'
 import { ClaudeCodeAgent } from './agent/claude-code'
@@ -43,8 +44,10 @@ const agent = new ClaudeCodeAgent({
 })
 
 const stt = createStt(process.env)
+const tts = createTts(process.env)
 const glasses = createGlassesServer({
   stt,
+  tts,
   agent,
   token: cfg.token,
   ttlMs: cfg.ttlMs,
@@ -70,10 +73,10 @@ Bun.serve({
   fetch: (req: Request, server) => {
     const path = new URL(req.url).pathname
     if (path === '/') return new Response('rode ok')
-    if (path.startsWith('/glasses/')) {
+    if (path.startsWith('/glasses/') || path.startsWith('/tts/')) {
       const ip = server.requestIP(req)?.address ?? 'unknown'
       if (!rl.allow(ip)) return new Response('too many requests', { status: 429 })
-      return glasses.handleChat(req)
+      return glasses.handleRequest(req)
     }
     return new Response('not found', { status: 404 })
   },
