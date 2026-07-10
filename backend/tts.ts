@@ -15,6 +15,10 @@ export type TtsEnv = {
   RODE_TTS_ENGINE?: string
   RODE_TTS_VOICE?: string
   RODE_EDGE_TTS_BIN?: string
+  /** 语速，edge-tts --rate 格式（如 "+20%"）。 */
+  RODE_TTS_RATE?: string
+  /** 音调，edge-tts --pitch 格式（如 "-15Hz"）。 */
+  RODE_TTS_PITCH?: string
   /** ffmpeg 路径；"off" 关闭静音裁剪。默认 "ffmpeg"（找不到则该段自动跳过裁剪）。 */
   RODE_TTS_FFMPEG?: string
 }
@@ -27,6 +31,8 @@ export function createTts(env: TtsEnv): TtsEngine {
     return new EdgeTts({
       bin: env.RODE_EDGE_TTS_BIN ?? 'edge-tts',
       voice: env.RODE_TTS_VOICE ?? 'zh-CN-XiaoxiaoNeural',
+      rate: env.RODE_TTS_RATE?.trim() || undefined,
+      pitch: env.RODE_TTS_PITCH?.trim() || undefined,
       ffmpeg: ff && ff !== 'off' ? ff : undefined,
     })
   }
@@ -40,7 +46,7 @@ export class EdgeTts implements TtsEngine {
   readonly name = 'edge' as const
 
   constructor(
-    private cfg: { bin: string; voice: string; ffmpeg?: string },
+    private cfg: { bin: string; voice: string; rate?: string; pitch?: string; ffmpeg?: string },
     private run: TtsRunner = runTtsCommand,
     private timeoutMs = 10_000,
   ) {}
@@ -54,6 +60,8 @@ export class EdgeTts implements TtsEngine {
         this.cfg.bin,
         '--text', text,
         '--voice', this.cfg.voice,
+        ...(this.cfg.rate ? ['--rate', this.cfg.rate] : []),
+        ...(this.cfg.pitch ? ['--pitch', this.cfg.pitch] : []),
         '--write-media', output,
       ], this.timeoutMs)
       // 裁掉 edge-tts 每段首尾垫的静音（分句播放时段间断感的主要来源）。
