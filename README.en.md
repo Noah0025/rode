@@ -49,12 +49,12 @@ glasses HUD shows text + optionally plays backend-synthesized audio
 **Glasses permissions**
 | Present and in use | Declared but restricted / not enabled |
 |---|---|
-| Microphone (record speech) · Network · Wake lock (no sleep within a turn) · Read battery/WiFi signal/time (status bar) · URL+token injected via adb | `CHANGE_WIFI_STATE`: **Android 12 blocks non-system apps from enabling WiFi**, so it actually cannot be turned on (falls back to adb, see below) · `CAMERA`: declared, but **v1 has no vision** (records audio only; no photos sent; the protocol reserves an image field, glasses-side implementation pending) |
+| Microphone (record speech) · Network · Wake lock (no sleep within a turn) · Read battery/WiFi signal/time (status bar) · URL+token injected via adb | `CHANGE_WIFI_STATE`: **Android 12 blocks non-system apps from enabling WiFi**, so the rode app itself still can't turn it on (use the official Rokid phone app or adb, see below) · `CAMERA`: declared, but **v1 has no vision** (records audio only; no photos sent; the protocol reserves an image field, glasses-side implementation pending) |
 
 **Current limitations (v1 cannot do)**
 - **No on-device TTS**: YodaOS omits the TextToSpeech system service; the Mac mini can run `edge-tts` and stream synthesized MP3 audio back (off by default; see SETUP)
 - **No vision**: no photos taken / no images sent (camera permission exists but is not wired up)
-- **WiFi cannot stay on automatically**: it gets turned off by YodaOS on battery/sleep, and the app has no permission to enable it → relies on the adb fallback or use while charging (see "Known WiFi limitation" below)
+- **WiFi cannot stay on automatically**: it gets turned off by YodaOS on battery/sleep; the rode app itself has no permission to re-enable it, but the **official Rokid phone app (Settings → WiFi) can toggle/switch the glasses' WiFi at the system level** — pair it once and you're set (see "Known WiFi limitation" below)
 - **Not streaming**: one answer per turn (returned as a whole), not token-by-token streaming output (streaming is on the roadmap)
 - **Not always-listening**: turn-based, triggered by a single tap, not actively listening (a power-saving + privacy design choice)
 - **Not offline**: all computation happens on your server backend; the glasses only do input and output; unusable when disconnected
@@ -76,20 +76,20 @@ The URL+token are not baked in at compile time; they are written at runtime by `
 
 ## ⚠️ Known WiFi limitation (read first, or the glasses won't connect to the backend)
 
-**Core problem**: the glasses (YodaOS) automatically turn off WiFi when on **battery power / asleep**, and **a regular app has no permission to turn it back on** — Android 12 blocks `setWifiEnabled()` for non-system apps, and the rode app's call returns false the same way. The glasses' native AI goes online **via Bluetooth to a phone**, not relying on WiFi, so the Rokid platform does not keep WiFi on persistently. **Result**: after the glasses reboot or sit idle for a while, WiFi turns off and the HUD shows "not connected to the backend."
+**Core problem**: the glasses (YodaOS) automatically turn off WiFi when on **battery power / asleep**, and **third-party apps (including rode) have no permission to turn it back on** — Android 12 blocks `setWifiEnabled()` for non-system apps, and the rode app's call returns false the same way. The glasses' native AI goes online **via Bluetooth to a phone**, not relying on WiFi, so the Rokid platform does not keep WiFi on persistently. **Result**: after the glasses reboot or sit idle for a while, WiFi turns off and the HUD shows "not connected to the backend."
 
-**This is not a bug, it is a platform limitation.** The realistic usage for now:
+**This is not a bug, it is a platform limitation — but Rokid now ships an official fix.**
 
-1. **Save the WiFi first**: plug the glasses into USB, connect to your WiFi once in developer mode (`adb shell cmd wifi connect-network "<SSID>" wpa2 "<password>"`, or connect once in the glasses settings) so it remembers the network.
-2. **When WiFi gets turned off, force it on with adb** (the app has no permission, but adb does):
+1. **First choice: the Rokid phone app** (the official app used to pair the glasses) → **Settings → WiFi** — a system-level provisioning entry that can turn the glasses' WiFi on/off, pick a network, or connect to a new one, unrestricted by the third-party permission wall. With your phone nearby, connectivity is a non-issue.
+2. **No-phone fallback: adb** (glasses on USB, or adb-over-WiFi already enabled):
    ```sh
    adb shell svc wifi enable          # turn WiFi on; auto-reconnects to the saved network
    adb shell cmd wifi status          # confirm connected (look for "connected to ...")
    ```
-3. **More stable while charging**: WiFi is less likely to be turned off while plugged in / in use, and turn-based voice is good enough.
-4. **After every glasses reboot** WiFi defaults to off, so you need to `adb shell svc wifi enable` once more.
+3. **Save the WiFi once** (needed either way): let the glasses remember your network — connect once via the Rokid app, or `adb shell cmd wifi connect-network "<SSID>" wpa2 "<password>"`.
+4. **After every glasses reboot** WiFi defaults to off, so re-enable it via either method above.
 
-**A complete fix**: either give the app control over WiFi (requires Device Owner, which requires a factory reset — not adopted by this project), or switch to a low-power form factor that **goes through Bluetooth to a phone** (Rokid's official path, see roadmap R1). v1 takes the compromise of "adb fallback + use while charging."
+**A fully phone/adb-free fix**: switch to a low-power **Bluetooth-through-phone** relay form factor (Rokid's official CXR path, see roadmap R1). v1's current state — WiFi direct plus connectivity managed via the official Rokid app — is good enough.
 
 ## Security
 - Each backend **generates a random token**, kept only in the local `.env` and the glasses prefs; zero secrets in the repo (`scripts/check-no-secrets.sh` scans for them)
@@ -108,7 +108,7 @@ Several projects already bring AI to smart glasses. rode positions itself as a *
 | [RokidAIAssistant](https://github.com/zero2005x/RokidAIAssistant) | Rokid (same hardware) | Glasses ↔ phone Bluetooth | Cloud API (multiple providers, bring your own key), not self-hosted |
 | [MentraOS](https://github.com/Mentra-Community/MentraOS) | Vuzix / Even / Mach1 | Vendor OS, self-hosted mini-app | Can connect a local LLM; does not support Rokid |
 
-**Architecture trade-off**: rode v1 takes the "glasses connect to the backend directly over WiFi, no phone" route, which wins on being the least hassle — no extra phone app needed; the cost is that YodaOS turns off WiFi while idle, requiring an adb fallback (see "Known WiFi limitation"). The other route is "Bluetooth through a phone companion" (adopted by RokidAIAssistant and others, requiring a dedicated phone app + the Rokid CXR SDK), which avoids the WiFi problem but requires carrying a phone — this is rode's roadmap R1, not a ruled-out option.
+**Architecture trade-off**: rode v1 takes the "glasses connect to the backend directly over WiFi, no phone" route, which wins on being the least hassle — no extra phone app needed; YodaOS turns off WiFi while idle, re-enabled via the official Rokid phone app (Settings → WiFi) or adb (see "Known WiFi limitation"). The other route is "Bluetooth through a phone companion" (adopted by RokidAIAssistant and others, requiring a dedicated phone app + the Rokid CXR SDK), which achieves a WiFi-free low-power form factor but requires dedicated development — this is rode's roadmap R1, not a ruled-out option.
 
 ## Roadmap
 - **R1 CXR Bluetooth mobile form factor**: a phone companion acts as a gateway over Bluetooth, removing the need for public ingress + low power + fixes WiFi (Rokid's official form factor)

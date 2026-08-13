@@ -2,6 +2,7 @@ node_modules/
 .env
 inbox/
 *.log
+.DS_Store
 
 # whisper 模型（大文件，不入库）
 models/

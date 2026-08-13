@@ -50,12 +50,12 @@
 **眼镜权限**
 | 已有且在用 | 声明了但受限 / 未启用 |
 |---|---|
-| 麦克风（录音说话）· 网络 · 唤醒锁（一轮内不休眠）· 读电量/WiFi信号/时间（状态栏）· 经 adb 注入 URL+token | `CHANGE_WIFI_STATE`：**Android 12 拦截非系统 app 开 WiFi**，实际开不了（靠 adb 兜底，见下）· `CAMERA`：已声明，但 **v1 未接视觉**（只录音、不拍照传图；协议预留图片字段，眼镜端待实现）|
+| 麦克风（录音说话）· 网络 · 唤醒锁（一轮内不休眠）· 读电量/WiFi信号/时间（状态栏）· 经 adb 注入 URL+token | `CHANGE_WIFI_STATE`：**Android 12 拦截非系统 app 开 WiFi**，rode app 自身依然开不了（用 Rokid 官方手机 App 或 adb 兜底，见下）· `CAMERA`：已声明，但 **v1 未接视觉**（只录音、不拍照传图；协议预留图片字段，眼镜端待实现）|
 
 **当前限制（v1 做不到）**
 - **端侧无 TTS**：YodaOS 裁掉了 TextToSpeech 系统服务；可在 Mac mini 安装 `edge-tts`，由后端合成 MP3 回传播放（默认关闭，见 SETUP）
 - **无视觉**：不拍照/不传图（摄像头权限有但未接）
-- **WiFi 不能自动常驻**：电池/休眠被 YodaOS 关、app 无权开 → 靠 adb 兜底或充电时用（详见下「WiFi 已知限制」）
+- **WiFi 不能自动常驻**：电池/休眠被 YodaOS 关；rode app 自身无权重开，但 **Rokid 官方手机 App（设置→WiFi）能系统级开关/切换眼镜 WiFi**，配一次手机即可（详见下「WiFi 已知限制」）
 - **非流式**：一轮一答（整段返回），非逐字流式输出（流式见路线图）
 - **非常听**：单击触发的回合制，不主动监听（省电 + 隐私的设计选择）
 - **不离线**：全部计算在你的服务器后端，眼镜只做输入输出；断网即不可用
@@ -77,20 +77,20 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 
 ## ⚠️ WiFi 已知限制（务必先读，否则眼镜连不上后端）
 
-**核心问题**：眼镜（YodaOS）在**电池供电 / 休眠**时会自动关闭 WiFi，而**普通 app 无权重新开启**——Android 12 拦截非系统 app 的 `setWifiEnabled()`，rode app 调用同样返回 false。眼镜原生 AI 通过**蓝牙连手机**上网、不依赖 WiFi，因此 Rokid 平台未保持 WiFi 常驻。**结果**：眼镜重启或闲置一段时间后 WiFi 即关闭，HUD 提示「没连上后端」。
+**核心问题**：眼镜（YodaOS）在**电池供电 / 休眠**时会自动关闭 WiFi，而**第三方 app（包括 rode）无权重新开启**——Android 12 拦截非系统 app 的 `setWifiEnabled()`，rode app 调用同样返回 false。眼镜原生 AI 通过**蓝牙连手机**上网、不依赖 WiFi，因此 Rokid 平台未保持 WiFi 常驻。**结果**：眼镜重启或闲置一段时间后 WiFi 即关闭，HUD 提示「没连上后端」。
 
-**这不是 bug，是平台限制。** 现阶段的现实用法：
+**这不是 bug，是平台限制，但 Rokid 官方已提供解法**：
 
-1. **先存好 WiFi**：眼镜插 USB，开发者模式下连一次你的 WiFi（`adb shell cmd wifi connect-network "<SSID>" wpa2 "<密码>"`，或在眼镜设置里连一次），让它记住网络。
-2. **WiFi 被关了就用 adb 强开**（app 无权，但 adb 可以）：
+1. **首选：Rokid 手机 App**（配对眼镜的官方 App）**设置 → WiFi**——这是系统级配网入口，能直接开关眼镜 WiFi、选网/切网/连新网，不受第三方权限墙限制。有手机在身边时，联网问题到此为止。
+2. **无手机场景兜底：adb**（眼镜插 USB 或已开 adb-over-WiFi）：
    ```sh
    adb shell svc wifi enable          # 开 WiFi，自动重连已存网络
    adb shell cmd wifi status          # 确认连上（看到 "connected to ..." 即可）
    ```
-3. **充电时更稳**：插着电/在用时 WiFi 不容易被关，回合制语音够用。
-4. **每次重启眼镜后** WiFi 默认关，需再 `adb shell svc wifi enable` 一次。
+3. **先存好 WiFi**（无论走哪条路都要做一次）：让眼镜记住你的网络——用 Rokid App 连一次，或 `adb shell cmd wifi connect-network "<SSID>" wpa2 "<密码>"`。
+4. **每次重启眼镜后** WiFi 默认关，需用上面两条之一重新开启。
 
-**彻底的解法**：要么让 app 持有 WiFi 控制权（需 Device Owner，须 factory reset，本项目不采用），要么改用**蓝牙经手机**的低功耗形态（Rokid 官方路线，见路线图 R1）。v1 采用「adb 兜底 + 充电时使用」的折中方案。
+**彻底的解法**（免手机/免 adb）：改用**蓝牙经手机**的低功耗中继形态（Rokid CXR 官方路线，见路线图 R1）。v1 现状=WiFi 直连 + Rokid 官方 App 管理联网，已够用。
 
 ## 安全
 - 每台后端**随机生成 token**，只进本机 `.env` 和眼镜 prefs；仓库零密钥（`scripts/check-no-secrets.sh` 扫描）
@@ -109,7 +109,7 @@ URL+token 不在编译期烤死，运行时由 `scripts/config-glasses.sh` 经 a
 | [RokidAIAssistant](https://github.com/zero2005x/RokidAIAssistant) | Rokid（同硬件）| 眼镜 ↔ 手机蓝牙 | 云 API（多家，自带 key），非自托管 |
 | [MentraOS](https://github.com/Mentra-Community/MentraOS) | Vuzix / Even / Mach1 | 厂商 OS，自托管 mini-app | 可接本地 LLM；不支持 Rokid |
 
-**架构取舍**：rode v1 走「眼镜 WiFi 直连后端、不经手机」的路线，胜在最省事——无需额外的手机 app；代价是 YodaOS 待机时会关闭 WiFi，需用 adb 兜底（见「WiFi 已知限制」）。另一条路是「蓝牙经手机 companion」（RokidAIAssistant 等采用，需专门写一个手机 app + 用 Rokid CXR SDK），可规避 WiFi 问题，但需随身带手机——这是 rode 的路线图 R1，而非已排除的方案。
+**架构取舍**：rode v1 走「眼镜 WiFi 直连后端、不经手机」的路线，胜在最省事——无需额外的手机 app；YodaOS 待机时会关闭 WiFi，靠 Rokid 官方手机 App（设置→WiFi）或 adb 重新开启（见「WiFi 已知限制」）。另一条路是「蓝牙经手机 companion」（RokidAIAssistant 等采用，需专门写一个手机 app + 用 Rokid CXR SDK），能做到无 WiFi 依赖的低功耗形态，但需专门开发——这是 rode 的路线图 R1，而非已排除的方案。
 
 ## 路线图
 - **R1 CXR 蓝牙移动形态**：手机 companion 经蓝牙做网关，免公网 + 低功耗 + 解决 WiFi（Rokid 官方形态）
