@@ -76,7 +76,7 @@ Plug the glasses in via USB:
 scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<your RODE_GLASSES_TOKEN>"
 ```
 (Inside the script: first start the app to bring it out of the stopped state, then explicitly `-n` the component to broadcast SET_CONFIG, then restart the app. This is the only reliable approach under Android's implicit-broadcast restrictions.)
-**Verify**: `adb shell run-as com.example.rokidvsikea cat shared_prefs/rode_config.xml` (debug build) shows the written chat_url.
+**Verify**: `adb shell run-as com.helm.rode cat shared_prefs/rode_config.xml` (debug build) shows the written chat_url.
 
 ### 6. End-to-end acceptance
 On the glasses (make sure WiFi is connected), single-click to talk and ask something → the HUD shows "what you said → thinking → the brain's answer."

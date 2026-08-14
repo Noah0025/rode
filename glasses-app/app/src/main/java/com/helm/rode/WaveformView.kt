@@ -1,4 +1,4 @@
-package com.example.rokidvsikea
+package com.helm.rode
 
 import android.animation.ValueAnimator
 import android.content.Context

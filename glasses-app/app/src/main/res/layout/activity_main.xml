@@ -43,7 +43,7 @@
     </ScrollView>
 
     <!-- 状态指示栏：IDLE 提示「单击说话/双击退出」/ 说话绿点右 / Rode Logo左 -->
-    <com.example.rokidvsikea.WaveformView
+    <com.helm.rode.WaveformView
         android:id="@+id/waveform"
         android:layout_width="match_parent"
         android:layout_height="30dp" />

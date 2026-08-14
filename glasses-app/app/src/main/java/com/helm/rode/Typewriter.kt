@@ -1,4 +1,4 @@
-package com.example.rokidvsikea
+package com.helm.rode
 
 /**
  * 打字机节奏:把突发/过快的流式 delta 平滑成**纯恒定速度**逐字揭示。

@@ -1,4 +1,4 @@
-package com.example.rokidvsikea
+package com.helm.rode
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -13,7 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.rokidvsikea.databinding.ActivityMainBinding
+import com.helm.rode.databinding.ActivityMainBinding
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch

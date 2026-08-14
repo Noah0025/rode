@@ -76,7 +76,7 @@ tailscale funnel status      # 记下 https://<node>.<tailnet>.ts.net
 scripts/config-glasses.sh "https://<node>.ts.net/glasses/chat" "<你的RODE_GLASSES_TOKEN>"
 ```
 （脚本内部：先启动 app 脱离 stopped → 显式 `-n` 组件 broadcast SET_CONFIG → 重启 app。这是 Android 隐式广播限制下唯一可靠的做法。）
-**验证**：`adb shell run-as com.example.rokidvsikea cat shared_prefs/rode_config.xml`（debug 包）能看到写入的 chat_url。
+**验证**：`adb shell run-as com.helm.rode cat shared_prefs/rode_config.xml`（debug 包）能看到写入的 chat_url。
 
 ### 6. 端到端验收
 眼镜（确保 WiFi 已连）单击说话问一句 → HUD 出现「你说的话 → 思考中 → 大脑回答」。

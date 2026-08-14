@@ -1,4 +1,4 @@
-package com.example.rokidvsikea
+package com.helm.rode
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

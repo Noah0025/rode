@@ -46,7 +46,7 @@
             android:name=".ConfigReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.example.rokidvsikea.SET_CONFIG" />
+                <action android:name="com.helm.rode.SET_CONFIG" />
             </intent-filter>
         </receiver>
     </application>

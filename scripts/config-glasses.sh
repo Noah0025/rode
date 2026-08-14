@@ -7,7 +7,7 @@ URL="$1"; TOKEN="$2"
 [ -z "$URL" ] || [ -z "$TOKEN" ] && { echo "用法: $0 <PUBLIC_URL> <TOKEN> [serial]"; exit 1; }
 case "$URL" in https://*) ;; *) echo "URL 必须 https"; exit 1;; esac
 S=""; [ -n "$3" ] && S="-s $3"
-PKG=com.example.rokidvsikea
+PKG=com.helm.rode
 adb $S shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 2
 adb $S shell am broadcast -n $PKG/.ConfigReceiver -a $PKG.SET_CONFIG --es url "$URL" --es token "$TOKEN" | grep -i completed
 adb $S shell am force-stop $PKG

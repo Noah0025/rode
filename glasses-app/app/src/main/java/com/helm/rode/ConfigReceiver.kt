@@ -1,4 +1,4 @@
-package com.example.rokidvsikea
+package com.helm.rode
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -7,7 +7,7 @@ import android.util.Log
 
 /**
  * 接收 setup 经 adb 注入的后端配置：
- *   adb shell am broadcast -a com.example.rokidvsikea.SET_CONFIG -p com.example.rokidvsikea \
+ *   adb shell am broadcast -a com.helm.rode.SET_CONFIG -p com.helm.rode \
  *     --es url "https://<your-backend>/glasses/chat" --es token "<token>" --ez ttsEnabled true
  * 校验：url 必须 https；token 非空。不打印 token。
  */

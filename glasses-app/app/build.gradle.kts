@@ -15,11 +15,11 @@ val glassesChatUrl = localProperties.getProperty("GLASSES_CHAT_URL")
 val glassesToken = localProperties.getProperty("GLASSES_TOKEN") ?: ""
 
 android {
-    namespace = "com.example.rokidvsikea"
+    namespace = "com.helm.rode"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.rokidvsikea"
+        applicationId = "com.helm.rode"
         minSdk = 28
         targetSdk = 34
         versionCode = 1
